@@ -1,4 +1,4 @@
-import { ChevronDown, Search, X } from 'lucide-react'
+import { AppWindow, ChevronDown, Search, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { type FeatureDefinition,FEATURES } from '../../../lib/features'
@@ -11,13 +11,13 @@ import styles from './FeaturesStep.module.css'
 type GroupId = 'workspace' | 'agents' | 'others'
 
 const GROUP_OF: Record<FeatureId, GroupId> = {
-  todos: 'workspace',
   browser: 'workspace',
   mcp: 'agents',
   playwright: 'agents',
   orchestrator: 'agents',
   graphify: 'others',
   aiMemory: 'others',
+  gsdSync: 'agents',
 }
 
 const GROUPS: GroupId[] = ['workspace', 'agents', 'others']
@@ -70,7 +70,6 @@ export function FeaturesStep() {
     const active = enabledFeatures[feature.id]
     setPreferences({
       enabledFeatures: { ...enabledFeatures, [feature.id]: !active },
-      ...(feature.id === 'todos' && !active ? { rightSidebarVisible: true } : {}),
     })
   }
 
@@ -142,6 +141,9 @@ export function FeaturesStep() {
 
                   {feature.id === 'playwright' && active ? (
                     <div className={styles.subRow}>
+                      <span className={styles.subIcon}>
+                        <AppWindow size={13} />
+                      </span>
                       <span className={styles.rowCopy}>
                         <span className={styles.subTitle}>
                           {t('features.playwright.browserMode.label')}

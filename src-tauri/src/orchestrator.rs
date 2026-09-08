@@ -123,6 +123,17 @@ pub fn orchestrator_set_concurrency(state: tauri::State<'_, OrchestratorState>, 
     state.core.set_concurrency_limit(limit);
 }
 
+/// Fed by the same usage poll that drives the warning chip, so the planner and the person read the
+/// same numbers at the same cadence.
+#[tauri::command]
+pub fn orchestrator_set_agent_fitness(
+    state: tauri::State<'_, OrchestratorState>,
+    agent: String,
+    snapshot: Value,
+) {
+    state.core.set_agent_fitness(&agent, snapshot);
+}
+
 /// The pane answers a blocked worker directly: the person is already looking at the question.
 #[tauri::command]
 pub fn orchestrator_answer(

@@ -20,13 +20,8 @@ import { pickFile } from '../../lib/dialog'
 import { getLocale, translate, useT } from '../../lib/i18n'
 import { writeScopedStorage } from '../../lib/storageNamespace'
 import { openInBrowser, openInFileExplorer, writeClipboardText, writePty } from '../../lib/tauri'
-import {
-  AGENT_TYPE_LABELS,
-  agentCliCommand,
-  type AgentRuntimeProfile,
-  type AgentType,
-  type Theme,
-} from '../../lib/types'
+import { agentLabel, resolveAgentCliCommand } from '../../lib/agentProviders'
+import type { AgentRuntimeProfile, AgentType, Theme } from '../../lib/types'
 import { useProjectsStore } from '../../stores/projectsStore'
 import { useUiStore } from '../../stores/uiStore'
 import { AgentInstallButton } from '../AgentInstall/AgentInstallButton'
@@ -379,7 +374,7 @@ export function XTermView({
           title: translate(getLocale(), 'prefs.cliPathMismatch'),
           body: translate(getLocale(), 'prefs.cliPathMismatchBody', {
             agent,
-            command: agentCliCommand(agent) ?? agent,
+            command: resolveAgentCliCommand(agent) ?? agent,
           }),
         })
         return
@@ -430,7 +425,7 @@ export function XTermView({
           </div>
           <AgentInstallButton
             agent={commandNotFound as AgentType}
-            label={AGENT_TYPE_LABELS[commandNotFound as AgentType] ?? commandNotFound}
+            label={agentLabel(commandNotFound)}
             onInstalled={() => setRetryKey((value) => value + 1)}
           />
           <button

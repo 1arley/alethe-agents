@@ -708,3 +708,337 @@ fn isolating_gives_each_worker_its_own_worktree() {
         let _ = std::fs::remove_dir_all(parent.join(".alethe-worktrees"));
     }
 }
+
+/// Emits a transcript and then holds the process open, so the job stays mid-turn while the test
+/// exercises a control message against it.
+fn fake_claude_holding_launcher(dir: &std::path::Path, transcript: &str) -> Launcher {
+    let path = dir.join("holding.jsonl");
+    std::fs::write(&path, transcript).expect("write fake transcript");
+    let script = dir.join("holding.bat");
+    std::fs::write(
+        &script,
+        format!(
+            "@echo off
+type \"{}\"
+ping -n 60 127.0.0.1 >NUL
+",
+            path.to_string_lossy()
+        ),
+    )
+    .expect("write holding script");
+    Launcher {
+        kind: "claude".into(),
+        program: PathBuf::from("cmd"),
+        args: vec!["/c".into(), script.to_string_lossy().into_owned()],
+        env: Vec::new(),
+    }
+}
+
+#[test]
+fn steering_a_running_claude_worker_interrupts_instead_of_waiting_out_the_turn() {
+    let dir = workspace("claude-steer-live");
+    let core = Core::default();
+    let transcript = concat!(
+        r#"{"type":"system","subtype":"init","session_id":"steer-session"}"#, "\n",
+        r#"{"type":"assistant","message":{"content":[{"type":"text","text":"heading the wrong way"}]}}"#, "\n",
+    );
+    core.set_launcher(fake_claude_holding_launcher(&dir, transcript));
+
+    call(
+        &core,
+        "alethe_delegate",
+        json!({ "tasks": ["go somewhere"], "cwd": dir.to_string_lossy(), "agent": "claude" }),
+    );
+    std::thread::sleep(std::time::Duration::from_millis(600));
+
+    let job_id = core.snapshot()["jobs"][0]["id"].as_str().expect("a job id").to_string();
+    assert_eq!(core.snapshot()["jobs"][0]["status"], "running");
+
+    let steered = call(
+        &core,
+        "alethe_steer",
+        json!({ "jobId": &job_id, "message": "turn around" }),
+    );
+    assert_eq!(steered["steered"], json!(job_id), "{steered}");
+    assert!(steered.get("queued").is_none(), "the steer only queued: {steered}");
+    assert_eq!(
+        core.snapshot()["jobs"][0]["status"], "running",
+        "the interrupt settled the job instead of restarting it"
+    );
+
+    let _ = call(&core, "alethe_cancel", json!({ "jobIds": [&job_id] }));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn steering_a_settled_claude_worker_queues_the_next_turn() {
+    let dir = workspace("claude-steer-idle");
+    let core = Core::default();
+    let transcript = concat!(
+        r#"{"type":"system","subtype":"init","session_id":"idle-session"}"#, "\n",
+        r#"{"type":"result","is_error":false,"result":"CLAUDE_DONE_OK"}"#, "\n",
+    );
+    core.set_launcher(fake_claude_launcher(&dir, transcript));
+
+    call(
+        &core,
+        "alethe_delegate",
+        json!({ "tasks": ["finish quickly"], "cwd": dir.to_string_lossy(), "agent": "claude" }),
+    );
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    let job_id = core.snapshot()["jobs"][0]["id"].as_str().expect("a job id").to_string();
+    assert_eq!(core.snapshot()["jobs"][0]["status"], "done");
+
+    let steered = call(
+        &core,
+        "alethe_steer",
+        json!({ "jobId": &job_id, "message": "one more thing" }),
+    );
+    assert_eq!(steered["queued"], json!(job_id), "{steered}");
+    assert_eq!(steered["waiting"], json!(1), "{steered}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn every_tool_response_carries_the_current_headroom() {
+    let core = Core::default();
+    core.set_agent_fitness("claude", json!({ "worst": "week", "used": 19, "rateLimited": false }));
+    core.set_agent_fitness(
+        "codex",
+        json!({ "worst": "week", "used": 60, "plan": "plus", "rateLimited": false }),
+    );
+
+    let status = call(&core, "alethe_status", json!({}));
+    assert_eq!(status["fitness"]["headroom"], "claude", "{status}");
+    assert_eq!(status["fitness"]["codex"]["plan"], "plus", "{status}");
+
+    let checked = call(&core, "alethe_check", json!({}));
+    assert_eq!(
+        checked["fitness"]["headroom"], "claude",
+        "alethe_check is the one response the planner must read: {checked}"
+    );
+}
+
+#[test]
+fn the_worst_window_decides_headroom_even_when_the_five_hour_ones_are_tied() {
+    let core = Core::default();
+    core.set_agent_fitness("claude", json!({ "worst": "week", "used": 19, "rateLimited": false }));
+    core.set_agent_fitness("codex", json!({ "worst": "week", "used": 60, "rateLimited": false }));
+
+    let status = call(&core, "alethe_status", json!({}));
+    assert_eq!(status["fitness"]["headroom"], "claude", "{status}");
+}
+
+#[test]
+fn delegating_to_an_exhausted_agent_names_the_other_side() {
+    let dir = workspace("headroom-hint");
+    let core = Core::default();
+    core.set_launcher(silent_launcher());
+    core.set_agent_fitness("claude", json!({ "worst": "week", "used": 12, "rateLimited": false }));
+    core.set_agent_fitness("codex", json!({ "worst": "week", "used": 91, "rateLimited": false }));
+
+    let delegated = call(
+        &core,
+        "alethe_delegate",
+        json!({ "tasks": ["something"], "cwd": dir.to_string_lossy(), "agent": "codex" }),
+    );
+    assert_eq!(delegated["headroomHint"]["agent"], "claude", "{delegated}");
+    let reason = delegated["headroomHint"]["reason"].as_str().unwrap_or_default();
+    assert!(reason.contains("91"), "the hint hides the number it is grounded in: {reason}");
+
+    let _ = call(&core, "alethe_cancel", json!({ "jobIds": [delegated["jobs"][0]["id"].clone()] }));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_rested_agent_gets_no_hint() {
+    let dir = workspace("headroom-quiet");
+    let core = Core::default();
+    core.set_launcher(silent_launcher());
+    core.set_agent_fitness("claude", json!({ "worst": "week", "used": 12, "rateLimited": false }));
+    core.set_agent_fitness("codex", json!({ "worst": "week", "used": 40, "rateLimited": false }));
+
+    let delegated = call(
+        &core,
+        "alethe_delegate",
+        json!({ "tasks": ["something"], "cwd": dir.to_string_lossy(), "agent": "codex" }),
+    );
+    assert!(
+        delegated.get("headroomHint").is_none(),
+        "nagged about headroom that is not running out: {delegated}"
+    );
+
+    let _ = call(&core, "alethe_cancel", json!({ "jobIds": [delegated["jobs"][0]["id"].clone()] }));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_board_records_why_a_worker_ran_where_it_ran() {
+    let dir = workspace("routing-trace");
+    let core = Core::default();
+    core.set_launcher(silent_launcher());
+    core.set_agent_fitness("claude", json!({ "worst": "week", "used": 12, "rateLimited": false }));
+    core.set_agent_fitness("codex", json!({ "worst": "week", "used": 91, "rateLimited": false }));
+
+    let ignored = call(
+        &core,
+        "alethe_delegate",
+        json!({ "tasks": ["into the strained side"], "cwd": dir.to_string_lossy(), "agent": "codex" }),
+    );
+    let chosen = call(
+        &core,
+        "alethe_delegate",
+        json!({ "tasks": ["into the rested side"], "cwd": dir.to_string_lossy(), "agent": "claude" }),
+    );
+
+    let snapshot = core.snapshot();
+    let routing_of = |id: &str| {
+        snapshot["jobs"]
+            .as_array()
+            .expect("jobs")
+            .iter()
+            .find(|job| job["id"] == id)
+            .expect("the job")["routing"]
+            .clone()
+    };
+
+    let first = ignored["jobs"][0]["id"].as_str().expect("an id").to_string();
+    let second = chosen["jobs"][0]["id"].as_str().expect("an id").to_string();
+    assert_eq!(routing_of(&first)["verdict"], "ignored");
+    assert_eq!(routing_of(&first)["used"], 91.0);
+    assert_eq!(routing_of(&second)["verdict"], "chosen");
+
+    let _ = call(&core, "alethe_cancel", json!({ "jobIds": [first, second] }));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_board_with_room_on_both_sides_records_no_reason_at_all() {
+    let dir = workspace("routing-quiet");
+    let core = Core::default();
+    core.set_launcher(silent_launcher());
+    core.set_agent_fitness("claude", json!({ "worst": "week", "used": 12, "rateLimited": false }));
+    core.set_agent_fitness("codex", json!({ "worst": "week", "used": 40, "rateLimited": false }));
+
+    let delegated = call(
+        &core,
+        "alethe_delegate",
+        json!({ "tasks": ["nothing notable"], "cwd": dir.to_string_lossy(), "agent": "codex" }),
+    );
+    let id = delegated["jobs"][0]["id"].as_str().expect("an id").to_string();
+    let snapshot = core.snapshot();
+    let job = snapshot["jobs"]
+        .as_array()
+        .expect("jobs")
+        .iter()
+        .find(|job| job["id"] == id.as_str())
+        .expect("the job");
+    assert!(
+        job["routing"].is_null(),
+        "labelled an edge that had nothing to say: {job}"
+    );
+
+    let _ = call(&core, "alethe_cancel", json!({ "jobIds": [id] }));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn with_both_sides_strained_the_board_blames_the_worse_one_every_time() {
+    let dir = workspace("routing-both-strained");
+    let core = Core::default();
+    core.set_launcher(silent_launcher());
+    // The reading that came back from a real run: both past the threshold, codex worse.
+    core.set_agent_fitness("claude", json!({ "worst": "5h", "used": 80, "rateLimited": false }));
+    core.set_agent_fitness("codex", json!({ "worst": "5h", "used": 98, "rateLimited": false }));
+
+    let mut ids = Vec::new();
+    for _ in 0..5 {
+        let delegated = call(
+            &core,
+            "alethe_delegate",
+            json!({ "tasks": ["work"], "cwd": dir.to_string_lossy(), "agent": "codex" }),
+        );
+        let id = delegated["jobs"][0]["id"].as_str().expect("an id").to_string();
+        let snapshot = core.snapshot();
+        let job = snapshot["jobs"]
+            .as_array()
+            .expect("jobs")
+            .iter()
+            .find(|job| job["id"] == id.as_str())
+            .expect("the job")
+            .clone();
+        assert_eq!(
+            job["routing"]["agent"], "codex",
+            "named the less strained side, or a different one each call: {job}"
+        );
+        assert_eq!(job["routing"]["verdict"], "ignored", "{job}");
+        ids.push(id);
+    }
+    let _ = call(&core, "alethe_cancel", json!({ "jobIds": ids }));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_hint_never_presents_an_equally_exhausted_agent_as_the_way_out() {
+    let dir = workspace("hint-both-strained");
+    let core = Core::default();
+    core.set_launcher(silent_launcher());
+    core.set_agent_fitness("claude", json!({ "worst": "5h", "used": 80, "rateLimited": false }));
+    core.set_agent_fitness("codex", json!({ "worst": "5h", "used": 98, "rateLimited": false }));
+
+    let delegated = call(
+        &core,
+        "alethe_delegate",
+        json!({ "tasks": ["work"], "cwd": dir.to_string_lossy(), "agent": "codex" }),
+    );
+    let hint = &delegated["headroomHint"];
+    assert_eq!(hint["agent"], "claude", "{delegated}");
+    assert_eq!(hint["bothStrained"], true, "{delegated}");
+    let reason = hint["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.contains("both are running out"),
+        "recommended a side that is itself at the ceiling without saying so: {reason}"
+    );
+
+    let _ = call(&core, "alethe_cancel", json!({ "jobIds": [delegated["jobs"][0]["id"].clone()] }));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_rate_limited_agent_outranks_any_percentage() {
+    let core = Core::default();
+    core.set_agent_fitness("claude", json!({ "worst": "5h", "used": 99, "rateLimited": false }));
+    core.set_agent_fitness("codex", json!({ "worst": "5h", "used": 10, "rateLimited": true }));
+
+    let status = call(&core, "alethe_status", json!({}));
+    assert_eq!(
+        status["fitness"]["headroom"], "claude",
+        "sent work to a side that is already refusing it: {status}"
+    );
+}
+
+#[test]
+fn the_delegate_schema_points_at_the_live_reading_instead_of_quoting_numbers() {
+    let core = Core::default();
+    let listed = rpc(&core, 1, "tools/list", json!({}));
+    let description = listed["result"]["tools"]
+        .as_array()
+        .expect("tools")
+        .iter()
+        .find(|tool| tool["name"] == "alethe_delegate")
+        .expect("alethe_delegate")["inputSchema"]["properties"]["agent"]["description"]
+        .as_str()
+        .expect("a description")
+        .to_string();
+
+    assert!(description.contains("fitness"), "{description}");
+    assert!(description.contains("headroom"), "{description}");
+    // A description is a session-start snapshot on this transport, so a figure baked in here would
+    // be a claim that goes stale mid-session with no way to correct it.
+    assert!(
+        !description.contains('%'),
+        "a percentage was baked into a description that cannot be refreshed: {description}"
+    );
+}

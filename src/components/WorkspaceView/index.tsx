@@ -908,7 +908,7 @@ function NoWorkspace({
   const openModal = useUiStore((s) => s.openModal_)
   const quickAgents = useMemo(
     () =>
-      (['claude', 'codex', 'antigravity', 'opencode', 'shell'] as AgentType[]).filter(
+      (['claude', 'codex', 'antigravity', 'opencode', 'shell', 'wsl'] as AgentType[]).filter(
         (agent) => enabledAgents[agent],
       ),
     [enabledAgents],

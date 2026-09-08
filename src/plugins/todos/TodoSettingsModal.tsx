@@ -1,21 +1,22 @@
 import { Folder, RotateCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
+import controls from '../../components/modals/controls.module.css'
+import { Modal } from '../../components/modals/Modal'
 import { pickDirectory } from '../../lib/dialog'
 import { useT } from '../../lib/i18n'
 import { ensureTodoTemplate } from '../../lib/tauri'
-import { useProjectsStore } from '../../stores/projectsStore'
 import { useUiStore } from '../../stores/uiStore'
-import controls from './controls.module.css'
-import { Modal } from './Modal'
+import { TODO_SETTINGS_MODAL_ID } from './manifest'
+import { useTodosStore } from './store'
 
 export function TodoSettingsModal() {
   const t = useT()
-  const open = useUiStore((state) => state.openModal === 'todoSettings')
+  const open = useUiStore((state) => state.openModal === TODO_SETTINGS_MODAL_ID)
   const closeModal = useUiStore((state) => state.closeModal)
-  const savedPath = useProjectsStore((state) => state.preferences.todoStoragePath)
-  const setPreferences = useProjectsStore((state) => state.setPreferences)
-  const resetTodosToDefault = useProjectsStore((state) => state.resetTodosToDefault)
+  const savedPath = useTodosStore((state) => state.storagePath)
+  const setStoragePath = useTodosStore((state) => state.setStoragePath)
+  const resetTodosToDefault = useTodosStore((state) => state.resetTodosToDefault)
   const [path, setPath] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -35,7 +36,7 @@ export function TodoSettingsModal() {
       if (finalPath) {
         await ensureTodoTemplate(finalPath)
       }
-      setPreferences({ todoStoragePath: finalPath })
+      setStoragePath(finalPath)
       closeModal()
     } catch (error) {
       window.alert(t('todo.templateError', { message: String(error) }))

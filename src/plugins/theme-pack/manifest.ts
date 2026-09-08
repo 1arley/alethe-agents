@@ -8,5 +8,6 @@ export const THEME_PACK_MANIFEST: PluginManifest = {
   apiVersion: 1,
   description: 'Ember, Golden Premium, Dark Lemon and Orca.',
   capabilities: ['ui.theme'],
+  activation: ['onStartupFinished'],
   spec: {},
 }

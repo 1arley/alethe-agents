@@ -1,5 +1,8 @@
 import { create } from 'zustand'
 
+/** The Todo plugin's view. The sidebar falls back when it is not installed. */
+const TODOS_VIEW_ID = 'todos'
+
 import {
   addMarkdownSidebarHistoryEntry,
   readMarkdownSidebarHistory,
@@ -38,7 +41,6 @@ type ModalKind =
   | 'themePicker'
   | 'profiles'
   | 'sync'
-  | 'todoSettings'
   | 'topbarSettings'
   | 'updateAvailable'
   | 'whatsNew'
@@ -49,11 +51,13 @@ type ModalKind =
   | 'handoff'
   | 'mcpManager'
   | 'mcpIntro'
+  /** Open on purpose: plugins contribute their own modals at runtime. */
+  | (string & {})
   | null
 
 export type ActiveView = 'home' | 'workspace' | 'agentCanvas' | 'agentSandbox'
 /** Open on purpose: plugins contribute right-sidebar tabs at runtime. */
-export type RightSidebarMode = 'todo' | 'markdown' | 'gsdSync' | 'mcp' | (string & {})
+export type RightSidebarMode = 'markdown' | 'gsdSync' | 'mcp' | (string & {})
 export type MarkdownSidebarTab = { path: string; title: string }
 
 export type MemorySample = MemoryStats & {
@@ -198,7 +202,7 @@ export const useUiStore = create<UiState>((set) => ({
   activeTerminal: null,
   selectedPanes: [],
   activeView: 'workspace',
-  rightSidebarMode: 'todo',
+  rightSidebarMode: TODOS_VIEW_ID,
   leftSidebarTab: 'projects',
   rightSidebarMarkdown: null,
   rightSidebarMarkdownTabs: [],
@@ -286,7 +290,7 @@ export const useUiStore = create<UiState>((set) => ({
       return {
         rightSidebarMarkdownTabs: tabs,
         rightSidebarMarkdown: next,
-        rightSidebarMode: next ? 'markdown' : 'todo',
+        rightSidebarMode: next ? 'markdown' : TODOS_VIEW_ID,
       }
     }),
   restoreMarkdownSidebarHistory: () =>
@@ -299,7 +303,7 @@ export const useUiStore = create<UiState>((set) => ({
       }
     }),
   showMarkdownSidebar: () => set({ rightSidebarMode: 'markdown' }),
-  showTodoSidebar: () => set({ rightSidebarMode: 'todo' }),
+  showTodoSidebar: () => set({ rightSidebarMode: TODOS_VIEW_ID }),
   setRightSidebarMode: (mode) => set({ rightSidebarMode: mode }),
   setLeftSidebarTab: (tab) => set({ leftSidebarTab: tab }),
   showGsdSyncSidebar: () => set({ rightSidebarMode: 'gsdSync' }),

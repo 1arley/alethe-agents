@@ -14,13 +14,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { commandContributions, commandLabel, useContributions } from '../../lib/plugins'
 import { useProjectsStore } from '../../stores/projectsStore'
 import { useUiStore } from '../../stores/uiStore'
-import type { AgentType } from '../../lib/types'
+import type { AgentType, BuiltinAgentType } from '../../lib/types'
 import { useT } from '../../lib/i18n'
 import { Modal } from './Modal'
 import controls from './controls.module.css'
 
-const ICONS: Record<AgentType, LucideIcon> = {
+const ICONS: Record<BuiltinAgentType, LucideIcon> = {
   shell: Terminal,
+  wsl: Terminal,
   claude: Sparkles,
   codex: Code2,
   copilot: Bot,
@@ -161,7 +162,10 @@ export function FindJumpModal() {
           </div>
         ) : (
           hits.map((hit, i) => {
-            const Icon = hit.kind === 'command' ? (hit.icon ?? ChevronRight) : ICONS[hit.type]
+            const Icon =
+              hit.kind === 'command'
+                ? (hit.icon ?? ChevronRight)
+                : (ICONS[hit.type as BuiltinAgentType] ?? Bot)
             const active = i === cursor
             return (
               <button

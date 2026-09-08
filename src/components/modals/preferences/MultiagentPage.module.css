@@ -194,58 +194,6 @@
   color: var(--fg-muted);
 }
 
-.pluginForm {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.pluginTextarea {
-  width: 100%;
-  min-height: 96px;
-  padding: 10px 12px;
-  color: var(--fg);
-  background: var(--bg-sunken);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.5;
-  outline: none;
-  resize: vertical;
-}
-
-.pluginTextarea:focus {
-  border-color: var(--accent);
-}
-
-.pluginRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-sunken);
-  font-size: 11px;
-}
-
-.pluginName {
-  font-weight: 600;
-}
-
-.pluginKind {
-  font-size: 9px;
-  color: var(--fg-muted);
-}
-
-.pluginDescription {
-  margin-top: 2px;
-  font-size: 10px;
-  color: var(--fg-muted);
-}
-
 .auditRow {
   display: flex;
   justify-content: space-between;
@@ -290,26 +238,4 @@
   font-size: 11px;
   cursor: pointer;
   user-select: none;
-}
-
-.pluginActions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.pluginToggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.pluginError {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--status-offline);
 }

@@ -1,8 +1,10 @@
 import type { ComponentType, ReactNode } from 'react'
 
+import type { AgentProviderContribution } from '../agentProviders'
 import type { Locale } from '../i18n'
 import type { PluginManifest } from '../tauri'
 import type { Terminal } from '../types'
+import type { PluginStorage } from './storage'
 
 export type Disposable = { dispose: () => void }
 
@@ -35,6 +37,15 @@ export type PaneContribution = {
   fallback?: ReactNode
 }
 
+/**
+ * A modal a plugin owns. The shell renders it when `openModal` matches the id,
+ * so a plugin does not have to reach into the UI store to mount itself.
+ */
+export type ModalContribution = {
+  id: string
+  component: ComponentType
+}
+
 export type SidebarSide = 'left' | 'right'
 
 /**
@@ -51,6 +62,8 @@ export type SidebarTabProps = {
 
 export type SidebarTabContribution = {
   id: string
+  pluginId: string
+  /** Container the manifest declares. A user placement override can move it. */
   side: SidebarSide
   /** Any icon component taking a `size` prop — lucide icons fit directly. */
   icon: ComponentType<{ size?: number | string }>
@@ -60,25 +73,33 @@ export type SidebarTabContribution = {
   /** Header shown above the panel. Defaults to the tab label. */
   panelLabelKey?: string
   order?: number
-  component: ComponentType<SidebarTabProps>
+  /** Null until the owning plugin activates and supplies the implementation. */
+  component: ComponentType<SidebarTabProps> | null
 }
 
 export type CommandContribution = {
   id: string
+  pluginId: string
   /** Fallback label. `labelKey` wins when its message resolves. */
   label: string
   labelKey?: string
   icon?: ComponentType<{ size?: number | string }>
   /** Extra words the command palette matches on, beyond the label. */
   keywords?: string
-  run: () => void | Promise<void>
+  /** Activates the owning plugin, then runs its handler. */
+  run: () => Promise<void>
 }
 
+/**
+ * Contributions a plugin registers imperatively. Views and commands are not
+ * here: those are announced in the manifest so the shell can draw them before
+ * the plugin's code loads, and only their implementation is registered.
+ */
 export type PluginContributions = {
   theme: (definition: ThemeContribution) => Disposable
   pane: (definition: PaneContribution) => Disposable
-  sidebarTab: (definition: SidebarTabContribution) => Disposable
-  command: (definition: CommandContribution) => Disposable
+  modal: (definition: ModalContribution) => Disposable
+  agentProvider: (definition: AgentProviderContribution) => Disposable
 }
 
 export type PluginContext = {
@@ -87,12 +108,18 @@ export type PluginContext = {
   /** Disposed on deactivate. Push anything the plugin must undo. */
   readonly subscriptions: Disposable[]
   readonly contributes: PluginContributions
+  /** Supplies the component for a view this plugin's manifest declares. */
+  registerView: (viewId: string, component: ComponentType<SidebarTabProps>) => Disposable
+  /** Supplies the handler for a command this plugin's manifest declares. */
+  registerCommand: (commandId: string, run: () => void | Promise<void>) => Disposable
   /** Registers messages under `plugin.<id>.` — the prefix is added for you. */
   registerMessages: (locale: Locale, messages: Record<string, string>) => Disposable
   /** Translates one of this plugin's own keys, without the prefix. */
   t: (key: string, params?: Record<string, string | number>) => string
   /** Rejects any command the manifest does not declare a capability for. */
   invoke: <T>(command: string, args?: Record<string, unknown>) => Promise<T>
+  /** The plugin's own persisted record, kept outside its served directory. */
+  readonly storage: PluginStorage
 }
 
 export type PluginModule = {

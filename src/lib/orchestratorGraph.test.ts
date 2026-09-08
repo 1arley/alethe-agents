@@ -37,6 +37,7 @@ function job(
     seconds: null,
     plan: [],
     tokens: null,
+    routing: null,
     worktree: null,
     hasDiff: false,
     summary: '',
@@ -354,5 +355,62 @@ describe('view maths', () => {
       x: 134,
       y: 56,
     })
+  })
+})
+
+describe('routing trace on the edge', () => {
+  it('labels a worker edge only when one side was running out', () => {
+    const board = layoutPlannerBoard(
+      groupRuns([
+        job({ id: 'job-01', runId: 'run-a' }),
+        job({
+          id: 'job-02',
+          runId: 'run-a',
+          routing: { verdict: 'ignored', agent: 'codex', window: 'week', used: 91 },
+        }),
+      ]),
+      undefined,
+      'pty-1',
+    )
+
+    const workerEdges = board.edges.filter((edge) => edge.to.startsWith('job-'))
+    expect(workerEdges.map((edge) => edge.note?.verdict ?? null)).toEqual([null, 'ignored'])
+  })
+
+  it('never labels a planner edge, which carries no single choice', () => {
+    const board = layoutPlannerBoard(
+      groupRuns([
+        job({
+          id: 'job-01',
+          runId: 'run-a',
+          routing: { verdict: 'chosen', agent: 'codex', window: 'week', used: 91 },
+        }),
+      ]),
+      undefined,
+      'pty-1',
+    )
+
+    const plannerEdges = board.edges.filter((edge) => edge.from === plannerNodeId('pty-1'))
+    expect(plannerEdges.length).toBeGreaterThan(0)
+    expect(plannerEdges.every((edge) => edge.note === null)).toBe(true)
+  })
+
+  it('puts the label on the connector so it can be drawn', () => {
+    const board = layoutPlannerBoard(
+      groupRuns([
+        job({
+          id: 'job-01',
+          runId: 'run-a',
+          routing: { verdict: 'chosen', agent: 'codex', window: 'week', used: 91 },
+        }),
+      ]),
+      undefined,
+      'pty-1',
+    )
+
+    const note = board.edges.find((edge) => edge.to === 'job-01')?.note
+    expect(note?.used).toBe(91)
+    expect(Number.isFinite(note?.x)).toBe(true)
+    expect(Number.isFinite(note?.y)).toBe(true)
   })
 })

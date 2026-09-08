@@ -26,7 +26,7 @@ import { getCachedAntigravityUsage } from '../../lib/antigravityUsageCache'
 import { getCachedClaudeUsage } from '../../lib/claudeUsageCache'
 import { getCachedCodexUsage } from '../../lib/codexUsageCache'
 import { useT } from '../../lib/i18n'
-import { useSidebarTabs } from '../../lib/plugins'
+import { useSidebarViews } from '../../lib/viewPlacement'
 import { observeClaudeReset, observeCodexReset } from '../../lib/limitResetWatch'
 import { formatShortcut } from '../../lib/platform'
 import { killPty, remoteControlInfo } from '../../lib/tauri'
@@ -132,11 +132,8 @@ export function TitleBar() {
   const activeProfileId = useProjectsStore((s) => s.activeProfileId)
   const preferences = useProjectsStore((s) => s.preferences)
   const setPreferences = useProjectsStore((s) => s.setPreferences)
-  const rightSidebarTabs = useSidebarTabs('right')
-  const rightPanelEnabled =
-    preferences.enabledFeatures.todos ||
-    preferences.enabledFeatures.mcp ||
-    rightSidebarTabs.length > 0
+  const rightSidebarTabs = useSidebarViews('right')
+  const rightPanelEnabled = preferences.enabledFeatures.mcp || rightSidebarTabs.length > 0
   const toggleWorkspaceTabPinned = useProjectsStore((s) => s.toggleWorkspaceTabPinned)
   const closeSavedWorkspaceTab = useProjectsStore((s) => s.closeSavedWorkspaceTab)
   const addWorkspaceTabToCurrent = useProjectsStore((s) => s.addWorkspaceTabToCurrent)

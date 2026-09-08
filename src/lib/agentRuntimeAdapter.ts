@@ -1,4 +1,4 @@
-import type { AgentRuntimeProfile, AgentType } from './types'
+import { isShellAgentType, type AgentRuntimeProfile, type AgentType } from './types'
 
 export type AgentRuntimeBackend = 'pty' | 'codex-app-server' | 'claude-agent-sdk'
 
@@ -21,7 +21,7 @@ export const AGENT_RUNTIME_ADAPTERS: AgentRuntimeAdapter[] = [
     label: 'PTY / ConPTY',
     experimental: false,
     available: true,
-    agents: ['shell', 'claude', 'codex', 'opencode', 'freebuff', 'mimo', 'kiro'],
+    agents: ['shell', 'wsl', 'claude', 'codex', 'opencode', 'freebuff', 'mimo', 'kiro'],
   },
   {
     id: 'codex-app-server',
@@ -57,7 +57,7 @@ export function preparePtyRuntimeLaunch(
   const args = [...baseArgs]
   const env = { ...(baseEnv ?? {}) }
 
-  if (profile === 'full' || agent === 'shell') {
+  if (profile === 'full' || isShellAgentType(agent)) {
     return { args, env: Object.keys(env).length > 0 ? env : undefined }
   }
 

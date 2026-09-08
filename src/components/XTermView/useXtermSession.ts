@@ -69,12 +69,8 @@ import {
   writeClipboardText,
   writePty,
 } from '../../lib/tauri'
-import {
-  agentCliCommand,
-  type AgentRuntimeProfile,
-  type AgentType,
-  type Theme,
-} from '../../lib/types'
+import { resolveAgentCliCommand } from '../../lib/agentProviders'
+import { isShellAgentType, type AgentRuntimeProfile, type AgentType, type Theme } from '../../lib/types'
 import { useProjectsStore } from '../../stores/projectsStore'
 import { useTerminalsStore } from '../../stores/terminalsStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -286,7 +282,7 @@ export function useXtermSession(params: {
       convertEol: false,
       allowProposedApi: true,
       scrollback: getTerminalScrollbackRows({
-        agent: command != null && command !== 'shell',
+        agent: command != null && !isShellAgentType(command),
         memoryBudgetMb: resourcePolicy.memoryBudgetMb,
       }),
 
@@ -871,7 +867,7 @@ export function useXtermSession(params: {
       if (container.scrollWidth > container.clientWidth + 2) scheduleResize(true)
       clampHorizontalScroll()
       queueInput(id, data)
-      if (startsNewSession && command && command !== 'shell') {
+      if (startsNewSession && command && !isShellAgentType(command)) {
         cancelScheduledFlush()
         pendingWrites = []
         pendingWriteLength = 0
@@ -922,13 +918,13 @@ export function useXtermSession(params: {
                 title: translate(getLocale(), 'prefs.cliPathMismatch'),
                 body: translate(getLocale(), 'prefs.cliPathMismatchBody', {
                   agent: command,
-                  command: agentCliCommand(command) ?? command,
+                  command: resolveAgentCliCommand(command) ?? command,
                 }),
               })
             }
           }
           if (!launcherOverride) {
-            const auto = await findCliLauncher(agentCliCommand(command) ?? command)
+            const auto = await findCliLauncher(resolveAgentCliCommand(command) ?? command)
             console.info(`[pty-launch] ${command} findCliLauncher → ${auto ?? 'null (NOT FOUND)'}`)
             if (!auto) {
               console.warn(
@@ -1132,8 +1128,9 @@ export function useXtermSession(params: {
           if (disposed) return
         }
 
-        if (command === 'opencode' && cwd && gsdWatcherEnabled) {
-          const modelChain = useProjectsStore.getState().preferences.gsdSyncModelChain ?? []
+        const { preferences } = useProjectsStore.getState()
+        if (command === 'opencode' && cwd && gsdWatcherEnabled && preferences.enabledFeatures.gsdSync) {
+          const modelChain = preferences.gsdSyncModelChain ?? []
 
           await gsdOpenCodePluginWrite(cwd, modelChain).catch((error) => {
             console.error(`[pty-launch] gsdOpenCodePluginWrite falhou pra ${cwd}:`, error)
@@ -1195,7 +1192,7 @@ export function useXtermSession(params: {
             cols: terminal.cols,
             rows: terminal.rows,
             id: ptyId,
-            command: command ? agentCliCommand(command) : undefined,
+            command: command ? resolveAgentCliCommand(command) : undefined,
             cwd: cwd ?? undefined,
             extraArgs: spawnArgs,
             launcherOverride,
@@ -1324,7 +1321,7 @@ export function useXtermSession(params: {
                 if (command === 'codex' || command === 'claude') {
                   await Promise.race([
                     new Promise((resolve) => setTimeout(resolve, delayMs)),
-                    waitForSessionHint(command),
+                    waitForSessionHint(command === 'codex' ? 'codex' : 'claude'),
                   ])
                 } else {
                   await new Promise((resolve) => setTimeout(resolve, delayMs))

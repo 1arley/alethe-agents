@@ -13,12 +13,6 @@ export type FeatureDefinition = {
 
 export const FEATURES: readonly FeatureDefinition[] = [
   {
-    id: 'todos',
-    titleKey: 'features.todos.title',
-    descriptionKey: 'features.todos.description',
-    keywordsKey: 'features.todos.keywords',
-  },
-  {
     id: 'browser',
     titleKey: 'features.browser.title',
     descriptionKey: 'features.browser.description',
@@ -50,6 +44,13 @@ export const FEATURES: readonly FeatureDefinition[] = [
     keywordsKey: 'features.orchestrator.keywords',
   },
   {
+    id: 'gsdSync',
+    titleKey: 'features.gsdSync.title',
+    descriptionKey: 'features.gsdSync.description',
+    keywordsKey: 'features.gsdSync.keywords',
+    secondary: true,
+  },
+  {
     id: 'aiMemory',
     titleKey: 'features.aiMemory.title',
     descriptionKey: 'features.aiMemory.description',
@@ -64,7 +65,7 @@ type StoredFeaturePreferences = {
 }
 
 /** Feature ids that became plugins. Read only by the one-time migration. */
-export type LegacyFeatureFlags = { git?: boolean }
+export type LegacyFeatureFlags = { git?: boolean; todos?: boolean }
 
 /**
  * Git Control is a plugin now. Returns the legacy flag once, so the caller can
@@ -74,12 +75,25 @@ export function legacyGitFeatureFlag(raw: StoredFeaturePreferences | undefined):
   return raw?.enabledFeatures?.git ?? raw?.showGitControl
 }
 
+/**
+ * Todo List is a plugin now. Before it was one, an existing profile with no
+ * `enabledFeatures` had Todo off — only a fresh profile got it. Returning
+ * undefined leaves the plugin at its default, so that case must say `false`
+ * explicitly or the tab would appear for people who never had it.
+ */
+export function legacyTodosFeatureFlag(
+  raw: StoredFeaturePreferences | undefined,
+): boolean | undefined {
+  if (raw === undefined) return undefined
+  if (raw.enabledFeatures) return raw.enabledFeatures.todos ?? true
+  return false
+}
+
 export function normalizeEnabledFeatures(
   raw: StoredFeaturePreferences | undefined,
 ): Record<FeatureId, boolean> {
   if (raw?.enabledFeatures) {
     return {
-      todos: raw.enabledFeatures.todos ?? true,
       browser: raw.enabledFeatures.browser ?? true,
       graphify: raw.enabledFeatures.graphify ?? true,
       mcp: raw.enabledFeatures.mcp ?? true,
@@ -89,15 +103,17 @@ export function normalizeEnabledFeatures(
       playwright: raw.enabledFeatures.playwright ?? false,
       // Opt-in: it lets the lead agent spawn worker agents that write to disk.
       orchestrator: raw.enabledFeatures.orchestrator ?? false,
+      // Opt-in: OpenCode-only, and it polls the worktrees of every watched project.
+      gsdSync: raw.enabledFeatures.gsdSync ?? false,
     }
   }
   return {
-    todos: raw === undefined,
     browser: true,
     graphify: true,
     aiMemory: false,
     mcp: true,
     playwright: false,
     orchestrator: false,
+    gsdSync: false,
   }
 }

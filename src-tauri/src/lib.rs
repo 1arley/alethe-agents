@@ -14,6 +14,7 @@ mod claude_usage;
 mod cli_launch;
 mod cli_resolver;
 mod cli_shim;
+mod cloud_sync;
 mod codex_app_server;
 mod codex_sessions;
 mod codex_usage;
@@ -48,6 +49,7 @@ pub mod orchestrator_core;
 mod paths;
 mod planning;
 mod planning_gate;
+mod plugin_assets;
 mod plugins;
 mod process_tree;
 mod profiles;
@@ -162,7 +164,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build());
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .register_uri_scheme_protocol("alethe-plugin", |ctx, request| {
+            plugin_assets::serve(ctx.app_handle(), &request)
+        });
 
     #[cfg(desktop)]
     {
@@ -243,6 +248,7 @@ pub fn run() {
             orchestrator::orchestrator_mcp_config_path,
             orchestrator::orchestrator_jobs,
             orchestrator::orchestrator_set_concurrency,
+            orchestrator::orchestrator_set_agent_fitness,
             orchestrator::orchestrator_message,
             orchestrator::orchestrator_answer,
             orchestrator::orchestrator_job_diff,
@@ -348,6 +354,12 @@ pub fn run() {
             github_sync::github_sync_logout,
             github_sync::github_sync_push,
             github_sync::github_sync_pull,
+            cloud_sync::cloud_sync_status,
+            cloud_sync::cloud_sync_device_start,
+            cloud_sync::cloud_sync_device_finish,
+            cloud_sync::cloud_sync_logout,
+            cloud_sync::cloud_sync_push,
+            cloud_sync::cloud_sync_pull,
             git_control::git_init,
             git_control::git_status,
             git_control::git_diff,
@@ -479,8 +491,11 @@ pub fn run() {
             plugins::plugins_disabled,
             plugins::plugins_dir,
             plugins::plugin_install,
+            plugins::plugin_import_dir,
             plugins::plugin_uninstall,
             plugins::plugin_set_enabled,
+            plugins::plugin_storage_read,
+            plugins::plugin_storage_write,
             mcp_store::mcp_scan,
             mcp_store::mcp_config_paths,
             mcp_store::mcp_capabilities,

@@ -6,6 +6,7 @@ import {
   ListTodo,
   Pencil,
   Plus,
+  Settings,
   Tag,
   Trash2,
   X,
@@ -13,26 +14,34 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-import { type GsdSyncSession, useGsdSyncSessions } from '../../hooks/useGsdSyncSessions'
+import { DotmCircular2 } from '../../components/ui/dotm-circular-2'
+import {
+  type GsdSyncSession,
+  useGsdSyncAvailable,
+  useGsdSyncSessions,
+} from '../../hooks/useGsdSyncSessions'
 import { useT } from '../../lib/i18n'
 import { formatShortcut } from '../../lib/platform'
 import { type PlanningStatus, readPlanningStatus } from '../../lib/tauri'
 import { TODO_TITLE_MAX_LENGTH } from '../../lib/todos'
 import type { Terminal, TodoItem } from '../../lib/types'
 import { selectActiveProject, useProjectsStore } from '../../stores/projectsStore'
-import { DotmCircular2 } from '../ui/dotm-circular-2'
+import { useUiStore } from '../../stores/uiStore'
+import { TODO_SETTINGS_MODAL_ID } from './manifest'
+import { useTodosStore } from './store'
 import styles from './TodoSidebar.module.css'
 
 function GsdSyncSection() {
   const t = useT()
   const activeProject = useProjectsStore(selectActiveProject)
   const setFullscreenPane = useProjectsStore((state) => state.setFullscreenPane)
+  const available = useGsdSyncAvailable()
   const sessions = useGsdSyncSessions()
   const projectSessions = activeProject
     ? sessions.filter((session) => session.projectId === activeProject.id)
     : []
 
-  if (!activeProject || projectSessions.length === 0) return null
+  if (!available || !activeProject || projectSessions.length === 0) return null
 
   return (
     <section className={styles.section}>
@@ -115,15 +124,16 @@ function GsdSyncRow({
 
 export function TodoSidebar() {
   const t = useT()
-  const todos = useProjectsStore((state) => state.todos)
+  const openModal = useUiStore((state) => state.openModal_)
+  const todos = useTodosStore((state) => state.todos)
   const projects = useProjectsStore((state) => state.projects)
-  const createTodo = useProjectsStore((state) => state.createTodo)
-  const renameTodo = useProjectsStore((state) => state.renameTodo)
-  const updateTodoTags = useProjectsStore((state) => state.updateTodoTags)
-  const setTodoProject = useProjectsStore((state) => state.setTodoProject)
-  const toggleTodo = useProjectsStore((state) => state.toggleTodo)
-  const deleteTodo = useProjectsStore((state) => state.deleteTodo)
-  const reorderTodo = useProjectsStore((state) => state.reorderTodo)
+  const createTodo = useTodosStore((state) => state.createTodo)
+  const renameTodo = useTodosStore((state) => state.renameTodo)
+  const updateTodoTags = useTodosStore((state) => state.updateTodoTags)
+  const setTodoProject = useTodosStore((state) => state.setTodoProject)
+  const toggleTodo = useTodosStore((state) => state.toggleTodo)
+  const deleteTodo = useTodosStore((state) => state.deleteTodo)
+  const reorderTodo = useTodosStore((state) => state.reorderTodo)
   const [title, setTitle] = useState('')
   const [tagDraft, setTagDraft] = useState('')
   const [projectDraft, setProjectDraft] = useState('')
@@ -150,7 +160,12 @@ export function TodoSidebar() {
       items: active.filter((todo) => todo.projectId === project.id),
     }))
     .filter((section) => section.items.length > 0)
-  const unassigned = active.filter((todo) => !todo.projectId)
+  // A todo pointing at a deleted project belongs to no section, so it would be
+  // invisible while still counting towards the progress bar.
+  const knownProjectIds = new Set(projects.map((project) => project.id))
+  const unassigned = active.filter(
+    (todo) => !todo.projectId || !knownProjectIds.has(todo.projectId),
+  )
 
   useEffect(() => {
     const focusComposer = (event: KeyboardEvent) => {
@@ -442,6 +457,15 @@ export function TodoSidebar() {
             <ListTodo size={17} />
             <span>{t('todo.title')}</span>
           </div>
+          <button
+            type="button"
+            className={styles.headerAction}
+            onClick={() => openModal(TODO_SETTINGS_MODAL_ID)}
+            title={t('todo.openSettings')}
+            aria-label={t('todo.openSettings')}
+          >
+            <Settings size={14} />
+          </button>
         </div>
         <div
           className={styles.progress}

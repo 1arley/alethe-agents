@@ -6,6 +6,7 @@ import { groupServersByName, matchesQuery, mcpErrorKey } from '../../lib/mcp'
 import { groupSkillsByName, matchesSkillQuery } from '../../lib/skills'
 import { skillsScan, type SkillAgentSnapshot } from '../../lib/tauri'
 import type { AgentType, McpAgent, McpAgentSnapshot, McpScope } from '../../lib/types'
+import { agentLabel } from '../../lib/agentProviders'
 import { AGENT_TYPE_LABELS, MCP_AGENTS } from '../../lib/types'
 import { useMcpStore } from '../../stores/mcpStore'
 import { useProjectsStore } from '../../stores/projectsStore'
@@ -241,7 +242,7 @@ export function McpPanel() {
                   <span className={styles.summary}>
                     {group.description ||
                       group.agents
-                        .map((agent) => AGENT_TYPE_LABELS[agent as AgentType] ?? agent)
+                        .map((agent) => agentLabel(agent))
                         .join(', ')}
                   </span>
                 </button>

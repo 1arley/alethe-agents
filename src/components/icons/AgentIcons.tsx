@@ -1,11 +1,14 @@
+import { Bot } from 'lucide-react'
+
 import claudeLogo from '../../assets/claude-code.png'
 import codexLogo from '../../assets/codex.png'
 import freebuffLogo from '../../assets/freebuff.png'
 import antigravityLogo from '../../assets/antigravity.png'
 import kiroLogo from '../../assets/kiro.svg'
 import { iconMap } from '../../assets/icons'
-import type { AgentType, Theme } from '../../lib/types'
+import { findAgentProvider } from '../../lib/agentProviders'
 import { isLightTheme } from '../../lib/themes'
+import type { AgentType, Theme } from '../../lib/types'
 
 export function ShellIcon({ size = 16 }: { size?: number }) {
   return (
@@ -19,6 +22,23 @@ export function ShellIcon({ size = 16 }: { size?: number }) {
     >
       <path d="M3 5l3 3-3 3" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M8 11h5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function WslIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    >
+      <rect x="1.5" y="1.5" width="13" height="13" rx="3" />
+      <path d="M5 6l2.5 2.5L5 11" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8.5 11H11" strokeLinecap="round" />
     </svg>
   )
 }
@@ -102,6 +122,7 @@ export function AgentIcon({
   theme: Theme
 }) {
   if (type === 'shell') return <ShellIcon size={size} />
+  if (type === 'wsl') return <WslIcon size={size} />
   if (type === 'claude') return <ClaudeIcon size={size} />
   if (type === 'codex') return <CodexIcon size={size} />
   if (type === 'copilot') return <CopilotIcon size={size} />
@@ -109,5 +130,7 @@ export function AgentIcon({
   if (type === 'mimo') return <MimoIcon size={size} />
   if (type === 'kiro') return <KiroIcon size={size} />
   if (type === 'antigravity') return <AntigravityIcon size={size} />
-  return <OpenCodeIcon size={size} theme={theme} />
+  if (type === 'opencode') return <OpenCodeIcon size={size} theme={theme} />
+  const ProviderIcon = findAgentProvider(type)?.icon
+  return ProviderIcon ? <ProviderIcon size={size} /> : <Bot size={size} />
 }

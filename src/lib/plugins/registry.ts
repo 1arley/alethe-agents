@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react'
 import type {
   CommandContribution,
   Disposable,
+  ModalContribution,
   PaneContribution,
   SidebarTabContribution,
   ThemeContribution,
@@ -37,6 +38,18 @@ export class ContributionList<T extends Identified> {
     }
   }
 
+  /** Replaces a value the same owner already registered. */
+  update(owner: string, id: string, next: T): void {
+    const current = this.entries.get(id)
+    if (!current || current.owner !== owner) return
+    this.entries.set(id, { owner, value: next })
+    this.refresh()
+  }
+
+  ownerOf(id: string): string | undefined {
+    return this.entries.get(id)?.owner
+  }
+
   get(id: string): T | undefined {
     return this.entries.get(id)?.value
   }
@@ -68,6 +81,7 @@ export class ContributionList<T extends Identified> {
 
 export const themeContributions = new ContributionList<ThemeContribution>()
 export const paneContributions = new ContributionList<PaneContribution>()
+export const modalContributions = new ContributionList<ModalContribution>()
 export const sidebarTabContributions = new ContributionList<SidebarTabContribution>()
 export const commandContributions = new ContributionList<CommandContribution>()
 

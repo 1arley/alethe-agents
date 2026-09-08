@@ -34,6 +34,17 @@ export type GraphEdge = {
   to: string
   lane: RunLane
   d: string
+  /** Only present when one agent was running out when this worker was spawned. */
+  note: GraphEdgeNote | null
+}
+
+export type GraphEdgeNote = {
+  verdict: 'chosen' | 'ignored'
+  agent: string
+  window: string
+  used: number
+  x: number
+  y: number
 }
 
 /**
@@ -106,6 +117,16 @@ function centerX(node: { x: number; width: number }): number {
 }
 
 /** Downward elbow with rounded corners: out of the parent's bottom, into the child's top. */
+/** The midpoint of a connector's horizontal run — the only stretch with room for a label. */
+export function connectorLabelPoint(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): { x: number; y: number } {
+  return { x: (x1 + x2) / 2, y: y1 + (y2 - y1) / 2 }
+}
+
 export function connectorPath(x1: number, y1: number, x2: number, y2: number): string {
   const dx = x2 - x1
   if (Math.abs(dx) < 1) return `M${x1} ${y1} V${y2}`
@@ -187,12 +208,20 @@ export function layoutPlannerBoard(
       }
       workers.push(node)
       bottom = Math.max(bottom, node.y + node.height)
+      const edgeFrom: [number, number, number, number] = [
+        centerX(root),
+        root.y + root.height,
+        centerX(node),
+        node.y,
+      ]
+      const label = connectorLabelPoint(...edgeFrom)
       runEdges.push({
         id: `${root.id}->${node.id}`,
         from: root.id,
         to: node.id,
         lane: LANE_OF[job.status],
-        d: connectorPath(centerX(root), root.y + root.height, centerX(node), node.y),
+        d: connectorPath(...edgeFrom),
+        note: job.routing ? { ...job.routing, x: label.x, y: label.y } : null,
       })
 
       if (mediaByJobId?.has(job.id)) {
@@ -215,6 +244,7 @@ export function layoutPlannerBoard(
           to: mediaNode.id,
           lane: LANE_OF[job.status],
           d: connectorPath(centerX(node), node.y + node.height, centerX(mediaNode), mediaNode.y),
+          note: null,
         })
       }
     })
@@ -252,6 +282,7 @@ export function layoutPlannerBoard(
         to: root.id,
         lane: runs[index].state,
         d: connectorPath(centerX(planner!), planner!.y + planner!.height, centerX(root), root.y),
+        note: null,
       })
     })
   }

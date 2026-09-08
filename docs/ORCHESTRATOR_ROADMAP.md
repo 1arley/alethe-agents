@@ -39,6 +39,7 @@ tool (CAAM) that exists solely to swap CLI accounts on limit. No major competito
 | Native web search for Codex workers | Shipped |
 | Usage/quota awareness inside the orchestrator | Shipped (v1) — warning chip in the header, no redirect action yet |
 | Cost/pricing-aware delegation (registry + guardrail) | Not started — Phase 5 |
+| Worker personas (planner / brainstorm / executor) | Not started — Phase 7 |
 | Apply an isolated worktree back to the branch | Shipped — clean/no-conflict path only |
 | Rich media on the canvas (images, embedded pages) | Shipped (v1) — image inline, link opens a pane |
 
@@ -54,8 +55,8 @@ process — architecturally the same shape as Codex's app-server, not a one-shot
 - Input line: `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"..."}]}}`
   — confirmed working on the first try, no `--resume` needed between turns.
 - `init` event repeats per turn (not just once) and carries `session_id`, `capabilities:
-  ["interrupt_receipt_v1","interrupt_cancel_queued_v1","msg_lifecycle_v1"]` — an interrupt/steer
-  path exists; exact control-message shape is still unknown.
+  ["interrupt_receipt_v1","interrupt_cancel_queued_v1","msg_lifecycle_v1"]` — the control-message
+  shape behind these is now known and validated live, see the checklist item below.
 - `rate_limit_event` is emitted per turn with `rateLimitType`, `resetsAt`, `status` — this doubles
   as free, real-time input for Phase 2, no separate poll needed for the Claude side.
 - The terminal `result` event carries `total_cost_usd`, full `usage` (incl. cache tokens),
@@ -75,7 +76,34 @@ options, not yet decided:
 
 **Checklist**
 - [x] Validate Claude's headless multi-turn protocol empirically (probe script, this session)
-- [ ] Find and validate the interrupt/steer control-message shape (`interrupt_receipt_v1` etc.)
+- [x] Find and validate the interrupt/steer control-message shape (`interrupt_receipt_v1` etc.) —
+      read out of the CLI binary's own embedded schema, then confirmed against the real `claude`
+      process in two live probes. **There is no mid-turn steer**: the only control message a running
+      turn accepts is `interrupt`, so Codex's `turn/steer` has no counterpart and never will on this
+      transport. The equivalent is queue-then-interrupt, which is what shipped.
+      - Request, written on the worker's stdin like any other stream-json line:
+        `{"type":"control_request","request_id":"<string>","request":{"subtype":"interrupt",
+        "cancel_queued":false}}`. `request_id` is a free-form string, **not** required to be a UUID
+        (probed: `"job-07-interrupt-3"` was echoed back verbatim), so no `uuid` crate was needed.
+      - Response, ~90ms later: `{"type":"control_response","response":{"subtype":"success",
+        "request_id":"<same>","response":{"still_queued":[...],"cancelled":[...]}}}`. The error form
+        is `{"subtype":"error","request_id":"<same>","error":"<message>"}`.
+      - `interrupt_receipt_v1` is what puts `still_queued` on that payload — the uuids of async user
+        messages that survive the abort and *will* run. `interrupt_cancel_queued_v1` is what honours
+        `cancel_queued:true`, which kills them instead and lists them under `cancelled`
+        (probed: `still_queued: []`, `cancelled: ["alethe-job-07-steer-1"]`).
+      - The aborted turn still emits a normal `result`. Its `terminal_reason` comes from the
+        `interrupted`/`aborted_streaming`/`aborted_tools`/`cancelled` family, but which one is not
+        worth guessing at, so the job carries an `awaiting_steer` flag instead and the `result` that
+        only acknowledges an interrupt Alethe itself asked for is not reported to the planner as a
+        finished turn.
+      - Shipped on top of this: `alethe_steer` on a running Claude worker pushes the correction to
+        the front of the inbox and interrupts, so `finish_turn` hands it straight back as the next
+        turn; `alethe_cancel` sends the same request with `cancel_queued:true` instead of the Codex
+        `turn/interrupt` JSON-RPC, which a Claude worker never understood.
+      - Covered by two new Rust tests (a running worker is interrupted, an idle one still queues).
+        The no-announce path on the aborted `result` is **not** unit-covered — the fake CLI replays a
+        fixed transcript and cannot be interrupted — so it rides on the manual end-to-end test below.
 - [x] Find and validate how approval/sandbox works in this mode — done: **no interactive approval
       channel exists over the raw CLI's stdio**, only auto-deny + report. Decided: ship v1 with
       `bypassPermissions` (matches Codex's own default-permissive behavior — approval there is
@@ -99,9 +127,11 @@ options, not yet decided:
       `a_claude_worker_picks_up_its_own_uncommitted_changes_as_a_diff`,
       `delegating_to_an_unconfigured_agent_fails_cleanly_like_any_other_agent`), using a fake
       `cmd /c type <transcript>` launcher instead of the real CLI, so they cost no API usage. 18/18
-      passing (`--test-threads=1`; one pre-existing test, `the_observer_sees_every_state_change`,
-      is flaky under the default parallel runner — confirmed unrelated to this change, passes
-      alone and single-threaded).
+      passing (24 across the suite after this session's additions; `--test-threads=1`; one pre-existing test, `the_observer_sees_every_state_change`,
+      is flaky — confirmed unrelated to this change). **Correction, observed since:** it is flaky
+      under `--test-threads=1` too, not only under the default parallel runner — it failed and then
+      passed on consecutive single-threaded runs of the same code. Single-threaded is not a reliable
+      workaround; a green run does not prove it fixed, and a red one does not prove a regression.
 - [x] A Codex planner can target a Claude worker — `codex_mcp_config_write` (`agent_events.rs`)
       registers a Codex terminal as a planner and points `.codex/config.toml`'s
       `[mcp_servers.alethe]` at a generated stdio-to-http bridge script (Codex's MCP client only
@@ -113,7 +143,7 @@ options, not yet decided:
 - [ ] Manual end-to-end test in the DEV build — covers both the Claude-worker backend and the
       Codex-planner bridge, still pending a real run
 
-**Phase progress: 6/8 (75%)**
+**Phase progress: 7/8 (87%)**
 
 ## Phase 2 — Quota awareness (Claude ↔ Codex)
 
@@ -181,7 +211,47 @@ GSD hooks) — worth mapping what's reusable before writing anything new.
 
 **Phase progress: 0/6 (0%)**
 
-## Phase 5 — Cost-aware delegation (Claude ↔ Codex)
+## Phase 5 — Headroom-aware delegation (Claude ↔ Codex)
+
+**The signal is remaining limit, not money (decided).** This phase was drafted as "cost-aware" and
+that framing was wrong. What decides where work goes is how much of each vendor's window is left and
+when it resets — the same numbers `UsageStrip.tsx` already renders for the human. Spend in dollars
+is a separate, optional nicety and no part of the routing decision.
+
+**Compare the binding window, never a fixed one (decided).** Claude reports three windows
+(`five_hour`, `seven_day`, `seven_day_opus`), Codex reports two (`primary`, `secondary`). A real
+reading shows why the shapes cannot be compared field-by-field:
+
+| | 5h | week | opus |
+|---|---|---|---|
+| claude | 20% | 19% | 0% |
+| codex | 22% | **60%** | — |
+
+On the 5-hour window they are tied (20 vs 22) and the choice looks arbitrary. On the week, Codex is
+three times closer to its ceiling. Codex is the one running out, and the 5-hour window hides it
+completely. So "running out" means *the worst window that agent has*, and Alethe resolves it before
+the planner ever sees it — the planner must not have to know that one vendor has three windows and
+the other has two.
+
+**Three bugs only a real reading found (recorded so they are not reintroduced).** The first live
+delegation against genuine usage — Codex at 98% of its 5h window, Claude at 80% — broke three
+things that 26 green tests had missed, because every test until then set one side strained and the
+other rested. Both sides past the threshold at once is the case that matters and the case nobody
+wrote:
+
+1. **The board blamed the wrong agent, at random.** `strained_agent` returned the *first* entry past
+   the threshold, and the block is built by iterating a `HashMap`, so the order is arbitrary. With
+   both sides over 80 the label could read `chosen · claude 5h 80%` on one refresh and
+   `ignored · codex 5h 98%` on the next. It now takes the *most* strained, over a sorted iteration.
+2. **The hint offered an equally exhausted agent as the way out** — "codex is at 98%; claude is at
+   80%" presents 80% as the escape when 80 *is* the threshold. The hint now carries
+   `bothStrained` and says so in words.
+3. **A rate-limited agent lost to a percentage.** Strain was compared on `used` alone, so an agent
+   actively refusing work at 10% beat one at 99%. Rate-limited is not "nearly gone", it is gone, and
+   it now outranks any number.
+
+**Notify, do not reroute (decided).** Alethe surfaces the numbers and names which side has headroom;
+the planner still chooses. No server-side substitution, no preference toggle, in this phase.
 
 **Why this phase, why now**: the product thesis above already names this the differentiator —
 "steering work to whichever tool is actually the right (and cheapest) fit" — but nothing built
@@ -213,15 +283,29 @@ existing launcher map, filled by a small Tauri command that the existing
 `useOrchestratorQuotaWarnings` poll loop calls right after each `getClaudeUsage`/`getCodexUsage`
 round — the same cadence (`USAGE_POLL_MS`), not a second poll.
 
+**Everything here is derived, never hand-maintained (decided).** An earlier draft of this phase
+opened with a static `src/lib/agentPricing.ts` holding plan names, monthly prices and free-tier
+terms, each stamped with `lastVerified` + `sourceUrl`. That is cut. The `lastVerified` field was
+invented to warn that a hand-written number had rotted — which is an admission that the number
+should not have been hand-written. Everything the routing decision needs is already detected:
+
+| Needed | Where it already comes from | Static today? |
+|---|---|---|
+| Claude headroom | `getClaudeUsage` → `five_hour` / `seven_day` / `seven_day_opus`, each `utilization` + `resets_at` | no |
+| Codex headroom | `getCodexUsage` → `primary`/`secondary` `used_percent`, `resets_at_ms`, `rate_limited`, `reset_credits` | no |
+| Codex plan name | `getCodexUsage` → `plan` | no — **already auto-detected** |
+| Live rate-limit hit | Phase 1's `rate_limit_event` → `Job.quota` | no |
+| Per-token rates | `agent_cost.rs`'s `pricing_for()` | **yes — hardcoded, and it must stop being** |
+
+`pricing_for()` (`agent_cost.rs:63`) hardcodes `opus → (5.0, 25.0)` and `sonnet → (3.0, 15.0)` in
+Rust. It is the one static number in the chain and it is already the stale one; making it dynamic is
+part of this phase, not a separate cleanup.
+
 **Pieces**:
-- **Pricing/plan/free-tier registry** — `src/lib/agentPricing.ts`, shaped like
-  `AGENT_INSTALL_CATALOG` (`Partial<Record<AgentType, AgentPricingEntry>>`): plan name(s), monthly
-  price, free-tier terms, a short human description of what "cheap right now" means for that vendor
-  (a flat-rate plan reads differently from pay-per-token). Each entry carries a `lastVerified` date
-  and `sourceUrl` — the existing per-token `pricing_for()` table in `agent_cost.rs` has no such
-  field, and nothing today flags a stale number when a vendor changes its pricing. Populated for
-  `claude` and `codex` only in this phase; every other agent is left absent on purpose, same as
-  `AGENT_INSTALL_CATALOG` already leaves gaps it doesn't cover.
+- **Spend, computed rather than declared** — the orchestration's real cost so far, from each `Job`'s
+  own `tokens` (already captured, already in the snapshot) times the per-token rate. No subscription
+  price table is involved, because the question the planner is actually asking is "what has this run
+  cost and what headroom is left", not "what does a Max plan cost per month".
 - **Live "cheap/available now" signal** — a small struct (`rate_limited: bool`,
   `used_percent: Option<f64>`, `plan: Option<String>`) derived from the two usage polls above,
   pushed into `Core` as described. Deliberately a raw signal, not a single computed "score" the
@@ -241,12 +325,21 @@ round — the same cadence (`USAGE_POLL_MS`), not a second poll.
     the agent server-side and returns `{"rerouted": true, "from": ..., "to": ..., "reason": ...}` in
     the same response shape `alethe_delegate` already returns — visible, not silent, logged like any
     other job.
-- **Tool-schema hint, kept static and small** — extend the `agent` property's description in
-  `tools()` (`orchestrator_core.rs:1334-1338`) with one clause naming the general cost shape of each
-  agent, same category as the existing "A Claude worker runs without an approval channel" sentence.
-  Kept static on purpose: whether `tools/list` is re-polled every turn by a given MCP client (Codex's
-  and Claude's own re-fetch cadence for a live session) is unverified, not assumed — live numbers
-  belong in the delegate *response* above, not baked into a description that can go stale mid-session.
+- **Awareness rides on every tool response, because it is the only channel that exists** — not just
+  `alethe_delegate`'s `costHint`. `alethe_status`, `alethe_check`, `alethe_send` and `alethe_steer`
+  all return JSON the planner reads, so each carries the same compact block: per-agent utilization
+  and reset time, `rate_limited`, detected plan, and the run's spend so far. `alethe_check` matters
+  most — its description already obliges the planner to process every delivery, so that is the one
+  response guaranteed to be read.
+- **Why not a `tools/list_changed` notification** — settled, do not re-open without changing the
+  transport. `handle_mcp_body` is one message in, one response out, served by `tiny_http` over POST
+  on the `agent_events` listener: there is **no server→client channel**, no SSE, no stream. So
+  `notifications/tools/list_changed` has nowhere to go, and the handshake's
+  `"capabilities": {"tools": {"listChanged": false}}` (`orchestrator_core.rs:2057`) is honest rather
+  than an oversight. A tool *description* carrying live numbers is therefore a session-start
+  snapshot at best and a stale claim at worst — which is exactly why the numbers ride on responses
+  instead. Keep the description to the durable shape of each agent (flat-rate vs pay-per-token, the
+  existing "runs without an approval channel" register), never a figure.
 - **Claude-side lever worth evaluating: Anthropic Managed Agents** — the "plan big, execute small"
   cookbook pattern (`claude-cookbooks/managed_agents/CMA_plan_big_execute_small.ipynb`) is a native,
   off-the-shelf version of part of this phase: a `multiagent` coordinator with no tools of its own
@@ -269,26 +362,68 @@ round — the same cadence (`USAGE_POLL_MS`), not a second poll.
   make explicitly, not one this phase makes for them.
 
 **Checklist**
-- [ ] `agentPricing.ts` registry — Claude + Codex entries only, each with `lastVerified` + `sourceUrl`
-- [ ] `AgentFitness` computation + `Core::set_agent_fitness` push path (new Tauri command +
-      `useOrchestratorQuotaWarnings` wiring), respecting the crate-free boundary above
-- [ ] `alethe_delegate`'s result carries `costHint` when the requested agent is worse off than the
-      alternative (suggest-only, no preference gate)
-- [ ] Preference toggle for opt-in auto-switch, off by default
-- [ ] `alethe_delegate` performs the substitution and returns `rerouted` when the preference is on
-      and the requested agent is exhausted
-- [ ] Extend the `agent` property's schema description in `tools()` with the static per-agent
-      cost-shape hint
-- [ ] Verify how often each supported MCP client actually re-requests `tools/list` in a live
-      session — decides whether the static hint above is worth keeping past this phase
-- [ ] Evaluate Anthropic Managed Agents (`multiagent` coordinator/worker, enforced
-      `budget.max_list_cost`, real per-thread `usage.list_cost`) as a prototype for routing
-      read-heavy/mechanical delegated sub-tasks to a cheap Claude model — resolve the local-first/
-      cloud-environment tension above before deciding to build on it
-- [ ] Manual test: force one side into rate-limit, confirm the hint appears, then confirm a real
-      reroute with the preference on
+- [x] `worstWindow(agent)` — collapse each vendor's windows to the one closest to its ceiling, so
+      the two shapes become comparable and the planner never sees the difference —
+      `src/lib/agentFitness.ts` (`claudeFitness` over 5h/week/opus, `codexFitness` over 5h/week),
+      4 tests. Carries the detected Codex `plan`; deliberately reports **no** plan for Claude,
+      because `UsageStrip.tsx:204` hardcodes `'max · 5x'` rather than detecting it.
+- [x] `AgentFitness` computation + `Core::set_agent_fitness` push path — new
+      `orchestrator_set_agent_fitness` command, called by the existing
+      `useOrchestratorQuotaWarnings` poll at the same `USAGE_POLL_MS`, so the planner and the
+      warning chip read one number at one cadence. The core stores it and never reaches out for it,
+      keeping this module Tauri-free. **Also fixed the chip itself**: it compared only
+      `five_hour`, so a worker exhausted on the weekly window raised no warning at all.
+- [x] `alethe_delegate`'s result carries `headroomHint` when the requested agent is past
+      `HEADROOM_THRESHOLD` (80, matching the frontend's `USAGE_FALLBACK_THRESHOLD`) or rate-limited
+      and the other side is not — naming the agent and the numbers it is grounded in. Renamed from
+      `costHint`: the signal is remaining limit, not money.
+- [x] Routing trace on the canvas — each worker records *why* it ran on the agent it ran on, and the
+      edge from its run carries the reason. Recorded only when one side was actually past the
+      threshold, so a board where both agents had room stays unlabelled. Two verdicts: `chosen`
+      (the planner went to the side with room) and **`ignored`** (it delegated into the strained
+      side while carrying that same reading from every earlier tool response). `ignored` is the
+      point of the feature: it is what shows whether notify-only is being obeyed, and therefore
+      what the auto-reroute decision should be reopened against. `routing` on the job →
+      `GraphEdge.note` (`orchestratorGraph.ts`, untouched by the concurrent plugin work) → an
+      absolutely-positioned label at the connector's horizontal run. Rendered as HTML, not SVG
+      `<text>`: the canvas `<svg>` is `aria-hidden`, and this label carries real information.
+- [x] Every tool response carries the fitness block — injected once in `call_tool`, which now wraps
+      `dispatch_tool`, so no handler can forget it and a new tool inherits it. Run-spend in dollars
+      is **not** included: the decision reads headroom, and money would reintroduce the rate table
+      this phase set out to stop depending on.
+- [x] Extend the `agent` property's schema description in `tools()` — kept to the durable shape
+      (which windows each vendor meters, and that they are not comparable across vendors) plus a
+      pointer at the `fitness` block on every response. No figure appears in it: on this transport a
+      description is a session-start snapshot, so a number here would go stale mid-session with no
+      way to correct it. A test asserts the description contains no `%`.
+- [x] Verify whether a live tool-list update is deliverable at all — **it is not**: the MCP
+      transport is request/response only (`tiny_http`, POST, one body in one body out), so
+      `notifications/tools/list_changed` has no channel and `listChanged: false` is correct. Live
+      numbers therefore ride on tool *responses*, and the item below is capped at the durable
+      per-agent shape, never a figure. Supersedes the old "how often does each client re-request"
+      question, which only matters if a push existed.
+- [x] Evaluate Anthropic Managed Agents as a prototype for routing read-heavy sub-tasks to a cheap
+      Claude model — **evaluated: do not build on it for the worker path.** The local-first tension
+      does not resolve. `config: {type: "self_hosted"}` exists and moves bash/file/code execution
+      into a container we control, but *"the agent loop stays on Anthropic's orchestration layer"* —
+      and the orchestration layer is exactly what `ROADMAP.md`'s "No hosted orchestration" rules
+      out, so self-hosting moves the half that was never the objection. Tool inputs and outputs
+      still flow to Anthropic's control plane either way. Three further costs, any one of which
+      would sink it on its own:
+      - **No PTY.** A CMA worker has no visible, take-over-able local terminal. That is the promise
+        Phase 1's CLI-based Claude worker exists to keep, and the reason it was built rather than
+        wrapping an SDK.
+      - **A new always-on daemon.** `self_hosted` requires a long-polling `EnvironmentWorker`
+        running beside the app, plus a Console-issued environment key per user — a second process
+        and a manual credential step in a desktop app that today spawns CLIs and nothing else.
+      - **It buys enforcement we just decided against.** Its real advantage over
+        `economy_agents.rs` is the *enforced* `budget.max_list_cost` and typed `usage.list_cost`.
+        This phase deliberately chose notify-only; a hard spend ceiling is not a capability gap
+        today. Revisit only if Alethe ever wants an enforced cap, and then as its own decision.
+- [ ] Manual test: force one side past the threshold, confirm the hint names the other side and
+      that the worst window is the one being compared
 
-**Phase progress: 0/9 (0%)**
+**Phase progress: 8/9 (88%)**
 
 ## Phase 6 — Cost-aware delegation, remaining agents
 
@@ -324,6 +459,59 @@ entries, it is five small research passes.
       above already has a worker backend by the time this lands
 
 **Phase progress: 0/13 (0%)**
+
+## Phase 7 — Base personas (planner / brainstorm / executor)
+
+**Goal**: let delegated work declare what *kind* of thinking it needs, not only which CLI runs it.
+Three base personas, shipped as skills, orthogonal to the `agent` axis — any persona can run on any
+backend, so this composes with Phases 1-4 instead of competing with them.
+
+**Not scheduled.** Recorded here so the shape is agreed before anyone builds it; it deliberately
+sits behind Phases 1, 2 and 5, which are the ones with live work.
+
+**The three personas**
+
+| Persona | Default? | Writes to disk | What it is for |
+|---|---|---|---|
+| `planner` | Yes | No | Decomposes the request, calls `alethe_delegate`, reconciles what comes back. What the lead agent already does today, made explicit and reusable. |
+| `brainstorm` | No | No | Divergent, read-only. Returns options with tradeoffs and an argued recommendation, never an edit. |
+| `executor` | No | Yes | One self-contained unit of work, carried to a diff. The closest thing to today's default worker behaviour. |
+
+**Decisions to fix before building**
+
+- A persona is a **prompt preset, not a sandbox**. Only `brainstorm`'s read-only promise is worth
+  enforcing mechanically, and the honest way to do it is the existing sandbox machinery, not trust
+  in the preset text. Whether Codex and Claude can both be spawned genuinely write-blocked needs the
+  same empirical probe Phase 1 used — do not assume the CLI flags do what their docs say.
+- `planner` being the default is a **statement about the lead**, not about workers: an undeclared
+  `alethe_delegate` call keeps spawning today's worker behaviour, so adding personas cannot silently
+  change the meaning of every existing delegation.
+- Personas imply defaults on the flags that already exist (`brainstorm` → `webSearch` on, no
+  worktree; `executor` → `isolate` on when the repo allows it). Those are defaults the caller can
+  still override, never a locked combination.
+
+**Open questions**
+
+- Where the preset is injected per backend — Claude takes an appended system prompt; Codex's
+  equivalent is unverified and is the first thing to probe.
+- Fixed set versus user-editable. A fixed set ships faster and keeps the `alethe_delegate` schema
+  description honest; editable personas are the obvious follow-up request.
+- Whether a persona is visible on the canvas card, and whether that is a badge or the card's whole
+  visual treatment.
+
+**Checklist**
+- [ ] Probe how each backend accepts a system-prompt preset (Claude first, Codex second), the same
+      way Phase 1 probed the worker protocol
+- [ ] Probe whether a genuinely write-blocked worker is spawnable per backend, for `brainstorm`
+- [ ] Define the three presets as skill files, versioned in the repo, English-only
+- [ ] `persona` property on `alethe_delegate`'s schema — optional, absent means today's behaviour
+- [ ] Carry `persona` onto `Job` and into the snapshot so the UI can read it
+- [ ] Apply the per-persona flag defaults, overridable by the caller
+- [ ] Surface the persona on the worker's canvas card
+- [ ] Rust tests in `tests/orchestrator.rs`, fake-CLI based like Phase 1's
+- [ ] Manual end-to-end test in the DEV build, one run per persona
+
+**Phase progress: 0/9 (0%)**
 
 ---
 

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 
+import { type AgentFitness, claudeFitness, codexFitness } from '../lib/agentFitness'
 import { USAGE_FALLBACK_THRESHOLD, USAGE_POLL_MS } from '../lib/agentCanvasConfig'
-import { getClaudeUsage, getCodexUsage } from '../lib/tauri'
+import { getClaudeUsage, getCodexUsage, setAgentFitness } from '../lib/tauri'
 
 export type QuotaWarning = {
   agent: 'claude' | 'codex'
@@ -15,25 +16,24 @@ export function useOrchestratorQuotaWarnings(): QuotaWarning[] {
   useEffect(() => {
     let cancelled = false
 
+    const report = async (agent: 'claude' | 'codex', fitness: AgentFitness) => {
+      await setAgentFitness(agent, fitness).catch(() => undefined)
+      return fitness.rateLimited || fitness.used >= USAGE_FALLBACK_THRESHOLD
+        ? { agent, pct: fitness.used, resetsAt: fitness.resetsAt }
+        : null
+    }
+
     const check = async () => {
       const next: QuotaWarning[] = []
       try {
-        const usage = await getClaudeUsage()
-        if (usage.five_hour.utilization >= USAGE_FALLBACK_THRESHOLD) {
-          next.push({ agent: 'claude', pct: Math.round(usage.five_hour.utilization), resetsAt: usage.five_hour.resets_at })
-        }
+        const warning = await report('claude', claudeFitness(await getClaudeUsage()))
+        if (warning) next.push(warning)
       } catch {
         // ignore
       }
       try {
-        const usage = await getCodexUsage()
-        if (usage.primary.used_percent >= USAGE_FALLBACK_THRESHOLD) {
-          next.push({
-            agent: 'codex',
-            pct: Math.round(usage.primary.used_percent),
-            resetsAt: usage.primary.resets_at_ms > 0 ? new Date(usage.primary.resets_at_ms).toISOString() : null,
-          })
-        }
+        const warning = await report('codex', codexFitness(await getCodexUsage()))
+        if (warning) next.push(warning)
       } catch {
         // ignore
       }

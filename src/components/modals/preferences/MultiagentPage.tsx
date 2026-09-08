@@ -1,20 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { useT } from '../../../lib/i18n'
-import { refreshLocalPlugins, setPluginEnabled, usePlugins } from '../../../lib/plugins'
-import type {
-  EventBusPayload,
-  MetricData,
-  PlanningCommit,
-  PluginManifest,
-} from '../../../lib/tauri'
+import type { EventBusPayload, MetricData, PlanningCommit } from '../../../lib/tauri'
 import {
   getPlanningAutocommit,
   getTelemetryMetrics,
   getTelemetryTraces,
   planningAuditHistory,
-  pluginInstall,
-  pluginUninstall,
   setPlanningAutocommit,
 } from '../../../lib/tauri'
 import { useProjectsStore } from '../../../stores/projectsStore'
@@ -37,9 +29,6 @@ export function MultiagentPage() {
   const [loadingTelemetry, setLoadingTelemetry] = useState(true)
   const [telemetryError, setTelemetryError] = useState(false)
 
-  const plugins = usePlugins()
-  const [pluginManifestInput, setPluginManifestInput] = useState('')
-
   const [autocommit, setAutocommit] = useState(false)
   const [auditLogs, setAuditLogs] = useState<PlanningCommit[]>([])
   const [loadingAudit, setLoadingAudit] = useState(false)
@@ -55,14 +44,6 @@ export function MultiagentPage() {
       setTelemetryError(true)
     } finally {
       setLoadingTelemetry(false)
-    }
-  }, [])
-
-  const loadPlugins = useCallback(async () => {
-    try {
-      await refreshLocalPlugins()
-    } catch (err) {
-      console.error('Failed to list plugins:', err)
     }
   }, [])
 
@@ -98,9 +79,8 @@ export function MultiagentPage() {
   }, [loadTelemetry])
 
   useEffect(() => {
-    void loadPlugins()
     void loadAutocommitState()
-  }, [loadPlugins, loadAutocommitState])
+  }, [loadAutocommitState])
 
   useEffect(() => {
     return schedulerStore.initListener()
@@ -120,41 +100,6 @@ export function MultiagentPage() {
   const handleTick = () => {
     if (selectedProjectId && repoPath) {
       void schedulerStore.tick(selectedProjectId, repoPath)
-    }
-  }
-
-  const handleInstallPlugin = async () => {
-    const raw = pluginManifestInput.trim()
-    if (!raw) return
-    try {
-      const manifest = JSON.parse(raw) as PluginManifest
-      if (!manifest.id || !manifest.name || !manifest.version || !manifest.kind) {
-        pushToast({ title: t('prefs.multiagentPluginInstallInvalid'), body: '' })
-        return
-      }
-      await pluginInstall(manifest)
-      pushToast({ title: t('prefs.multiagentPluginInstallSuccess'), body: '' })
-      setPluginManifestInput('')
-      void loadPlugins()
-    } catch (err) {
-      pushToast({
-        title: t('prefs.multiagentPluginInstallError', { error: String(err) }),
-        body: '',
-      })
-    }
-  }
-
-  const handleUninstallPlugin = async (id: string) => {
-    if (!window.confirm(t('prefs.multiagentPluginUninstallConfirm', { name: id }))) return
-    try {
-      await pluginUninstall(id)
-      pushToast({ title: t('prefs.multiagentPluginUninstallSuccess'), body: '' })
-      void loadPlugins()
-    } catch (err) {
-      pushToast({
-        title: t('prefs.multiagentPluginUninstallError', { error: String(err) }),
-        body: '',
-      })
     }
   }
 
@@ -301,81 +246,6 @@ export function MultiagentPage() {
                 </div>
                 <div className={multiagentStyles.traceTime}>
                   {new Date(trace.timestamp_ms).toLocaleTimeString()}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </SettingsSection>
-
-      <SettingsSection
-        id="multiagent-plugins"
-        title={t('prefs.multiagentPluginsTitle')}
-        description={t('prefs.multiagentPluginsDesc')}
-      >
-        <div className={multiagentStyles.pluginForm}>
-          <textarea
-            className={multiagentStyles.pluginTextarea}
-            value={pluginManifestInput}
-            onChange={(event) => setPluginManifestInput(event.target.value)}
-            placeholder={t('prefs.multiagentPluginInstallPlaceholder')}
-            spellCheck={false}
-          />
-          <button
-            type="button"
-            className={styles.secondaryButton}
-            disabled={!pluginManifestInput.trim()}
-            onClick={() => void handleInstallPlugin()}
-          >
-            {t('prefs.multiagentPluginInstallButton')}
-          </button>
-        </div>
-
-        {plugins.length === 0 ? (
-          <div className={multiagentStyles.emptyNote}>{t('prefs.multiagentNoPlugins')}</div>
-        ) : (
-          <div className={multiagentStyles.list}>
-            {plugins.map((plug) => (
-              <div key={plug.manifest.id} className={multiagentStyles.pluginRow}>
-                <div>
-                  <div className={multiagentStyles.pluginName}>
-                    {plug.manifest.name} (v{plug.manifest.version})
-                  </div>
-                  <div className={multiagentStyles.pluginKind}>
-                    {t('prefs.multiagentPluginKind', { kind: plug.manifest.kind })}
-                    {plug.source === 'bundled'
-                      ? ` · ${t('prefs.multiagentPluginBundled')}`
-                      : null}
-                  </div>
-                  <div className={multiagentStyles.pluginDescription}>
-                    {plug.manifest.description}
-                  </div>
-                  {plug.error ? (
-                    <div className={multiagentStyles.pluginError}>
-                      {t('prefs.multiagentPluginError', { error: plug.error })}
-                    </div>
-                  ) : null}
-                </div>
-                <div className={multiagentStyles.pluginActions}>
-                  <label className={multiagentStyles.pluginToggle}>
-                    <input
-                      type="checkbox"
-                      checked={plug.enabled}
-                      onChange={(event) =>
-                        void setPluginEnabled(plug.manifest.id, event.target.checked)
-                      }
-                    />
-                    {t('prefs.multiagentPluginEnabled')}
-                  </label>
-                  {plug.source === 'local' ? (
-                    <button
-                      type="button"
-                      className={multiagentStyles.cancelButton}
-                      onClick={() => void handleUninstallPlugin(plug.manifest.id)}
-                    >
-                      {t('prefs.multiagentPluginUninstall')}
-                    </button>
-                  ) : null}
                 </div>
               </div>
             ))}

@@ -30,7 +30,6 @@ export function FeaturesPage() {
                       ...preferences.enabledFeatures,
                       [feature.id]: !enabled,
                     },
-                    ...(feature.id === 'todos' && !enabled ? { rightSidebarVisible: true } : {}),
                   })
                 }
                 aria-pressed={enabled}

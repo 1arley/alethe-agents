@@ -25,7 +25,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 
 import { useT } from '../../lib/i18n'
-import { sidebarTabLabel, sidebarTabPanelLabel, useSidebarTabs } from '../../lib/plugins'
+import { sidebarTabLabel, sidebarTabPanelLabel } from '../../lib/plugins'
+import { useSidebarViews } from '../../lib/viewPlacement'
 import { formatShortcut } from '../../lib/platform'
 import {
   sidebarDragKind,
@@ -35,6 +36,7 @@ import {
 import { type Group, type Project } from '../../lib/types'
 import { useProjectsStore } from '../../stores/projectsStore'
 import { useUiStore } from '../../stores/uiStore'
+import { ContributedView } from '../ContributedView'
 import { EmptyState } from '../EmptyState'
 import { SidebarNowPlaying } from '../SidebarNowPlaying'
 import { UserProfile } from '../UserProfile'
@@ -168,7 +170,7 @@ export function NormalProjectSidebar() {
   const [dropIndicator, setDropIndicator] = useState<SidebarDropIndicator | null>(null)
   const sidebarTab = useUiStore((s) => s.leftSidebarTab)
   const setSidebarTab = useUiStore((s) => s.setLeftSidebarTab)
-  const contributedTabs = useSidebarTabs('left')
+  const contributedTabs = useSidebarViews('left')
   const contributedTab = contributedTabs.find((tab) => tab.id === sidebarTab)
   const keepHome = activeView === 'home'
 
@@ -618,7 +620,8 @@ export function NormalProjectSidebar() {
           <div className={styles.explorerHeader}>
             <span className={styles.explorerLabel}>{sidebarTabPanelLabel(t, contributedTab)}</span>
           </div>
-          <contributedTab.component
+          <ContributedView
+            view={contributedTab}
             projectId={activeProject?.id ?? null}
             cwd={sidebarSubTab?.cwd || sidebarTerminal?.cwd || null}
             ptyId={sidebarSubTab?.ptyId ?? null}

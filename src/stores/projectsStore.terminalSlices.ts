@@ -19,7 +19,7 @@ import {
   touchTerminalUsage,
 } from '../lib/terminalFactory'
 import { cleanupPtys } from '../lib/terminalLifecycle'
-import type { Terminal } from '../lib/types'
+import { isShellAgentType, type Terminal } from '../lib/types'
 import { sanitizeWorkspaceSnapshot } from '../lib/workspaceNavigation'
 import { useUiStore } from './uiStore'
 import type { ProjectsState } from './projectsStore'
@@ -107,7 +107,7 @@ export function createTerminalsSlice({ get, update, updateTerminal }: SliceCtx):
     createAgentTerminal: async (projectId, args) => {
       const state = get()
       const project = state.projects.find((p) => p.id === projectId)
-      const wantsIsolation = Boolean(project?.autoWorktree) && args.firstTab.type !== 'shell'
+      const wantsIsolation = Boolean(project?.autoWorktree) && !isShellAgentType(args.firstTab.type)
       if (project && wantsIsolation) {
         // worktree_provision resolve a raiz de verdade via `--git-common-dir`
 

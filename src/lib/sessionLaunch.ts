@@ -1,4 +1,4 @@
-import type { AgentType } from './types'
+import { isShellAgentType, type AgentType } from './types'
 
 export type AgentLaunch = {
   args: string[]
@@ -63,7 +63,7 @@ export function buildAgentLaunch(
   mcpConfigPaths?: readonly string[],
   hooksSettingsPath?: string,
 ): AgentLaunch {
-  if (agent === 'shell') {
+  if (isShellAgentType(agent)) {
     return { args: [...baseArgs], sessionId: undefined, createdSession: false }
   }
 

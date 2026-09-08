@@ -1269,3 +1269,22 @@
 .alignStart {
   align-self: flex-start;
 }
+
+.viewPlacementRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.viewPlacementRow + .viewPlacementRow {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.mutedNote {
+  color: var(--fg-faint);
+  font-size: 12px;
+}

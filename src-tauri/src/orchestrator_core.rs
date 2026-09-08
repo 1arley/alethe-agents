@@ -200,6 +200,12 @@ struct Job {
     child: Option<Arc<Mutex<Child>>>,
     stdin: Option<Arc<Mutex<ChildStdin>>>,
     inbox: VecDeque<String>,
+    /// Why this worker ran on the agent it ran on, recorded only when one side was actually
+    /// running out — so the board stays quiet when the choice carried no signal.
+    routing: Option<Value>,
+    /// Set while an interrupt this side requested is still in flight, so the `result` it aborts is
+    /// not reported to the planner as a finished turn.
+    awaiting_steer: bool,
     next_request_id: i64,
 }
 
@@ -225,6 +231,7 @@ impl Job {
             "plan": self.plan,
             "tokens": self.tokens,
             "quota": self.quota,
+            "routing": self.routing,
             "worktree": self.worktree,
             "pendingApproval": self.pending,
             "hasDiff": self.diff.is_some(),
@@ -303,6 +310,8 @@ impl Job {
             child: None,
             stdin: None,
             inbox: VecDeque::new(),
+            routing: None,
+            awaiting_steer: false,
             next_request_id: 10,
         })
     }
@@ -404,6 +413,9 @@ pub struct Core {
     /// One launcher per worker backend (`"codex"`, `"claude"`, ...), keyed by `Launcher::kind`, so
     /// more than one CLI can serve as a worker at the same time.
     launchers: Arc<Mutex<HashMap<String, Launcher>>>,
+    /// Per-agent remaining-limit snapshot, pushed in by the app layer. The core never polls for it:
+    /// the usage commands live in the full crate and this module is deliberately Tauri-free.
+    fitness: Arc<Mutex<HashMap<String, Value>>>,
     observer: Arc<Mutex<Option<Observer>>>,
     dispatch: Arc<Mutex<Option<Sender<Value>>>>,
     store: Arc<Mutex<Option<PathBuf>>>,
@@ -418,6 +430,7 @@ impl Default for Core {
             })),
             signal: Arc::new(Condvar::new()),
             launchers: Arc::new(Mutex::new(HashMap::new())),
+            fitness: Arc::new(Mutex::new(HashMap::new())),
             observer: Arc::new(Mutex::new(None)),
             dispatch: Arc::new(Mutex::new(None)),
             store: Arc::new(Mutex::new(None)),
@@ -622,6 +635,44 @@ impl Core {
 
     pub fn set_launcher(&self, launcher: Launcher) {
         guard(&self.launchers).insert(launcher.kind.clone(), launcher);
+    }
+
+    fn set_job_routing(&self, job_id: &str, routing: Value) {
+        let mut inner = guard(&self.inner);
+        if let Some(job) = inner.jobs.get_mut(job_id) {
+            job.routing = Some(routing);
+        }
+        self.notify(&inner);
+    }
+
+    pub fn set_agent_fitness(&self, agent: &str, snapshot: Value) {
+        guard(&self.fitness).insert(agent.to_string(), snapshot);
+    }
+
+    /// Every vendor's windows already collapsed to the worst one by the caller, so `used` is
+    /// comparable across agents that do not report the same set of windows.
+    fn fitness_block(&self) -> Option<Value> {
+        let fitness = guard(&self.fitness);
+        if fitness.is_empty() {
+            return None;
+        }
+        // Sorted, because the source is a HashMap and both the key order the planner reads and the
+        // agent picked on a tie have to be the same on every call.
+        let mut entries: Vec<(&String, &Value)> = fitness.iter().collect();
+        entries.sort_by(|a, b| a.0.cmp(b.0));
+        let mut block = Map::new();
+        let mut best: Option<(String, f64)> = None;
+        for (agent, snapshot) in entries {
+            let score = strain_of(snapshot);
+            if best.as_ref().is_none_or(|(_, top)| score < *top) {
+                best = Some((agent.clone(), score));
+            }
+            block.insert(agent.clone(), snapshot.clone());
+        }
+        if let Some((agent, _)) = best {
+            block.insert("headroom".into(), Value::String(agent));
+        }
+        Some(Value::Object(block))
     }
 
     pub fn set_observer(&self, observer: Observer) {
@@ -1225,6 +1276,25 @@ impl Core {
                 } else {
                     result_text
                 };
+                let steering = {
+                    let mut inner = guard(&self.inner);
+                    inner
+                        .jobs
+                        .get_mut(job_id)
+                        .map(|job| std::mem::take(&mut job.awaiting_steer))
+                        .unwrap_or(false)
+                };
+                if steering {
+                    self.finish_turn(
+                        job_id,
+                        STATUS_INTERRUPTED,
+                        None,
+                        String::new(),
+                        false,
+                        false,
+                    );
+                    return;
+                }
                 self.finish(
                     job_id,
                     if is_error { STATUS_FAILED } else { STATUS_DONE },
@@ -1247,6 +1317,20 @@ impl Core {
         text: String,
         terminal: bool,
     ) {
+        self.finish_turn(job_id, status, outcome, text, terminal, true);
+    }
+
+    /// `announce` is false for the `result` that only acknowledges an interrupt this side asked
+    /// for: the turn ended, but nothing was delivered, so the planner must not be told it was.
+    fn finish_turn(
+        &self,
+        job_id: &str,
+        status: &str,
+        outcome: Option<String>,
+        text: String,
+        terminal: bool,
+        announce: bool,
+    ) {
         let staged;
         {
             let mut inner = guard(&self.inner);
@@ -1268,7 +1352,9 @@ impl Core {
                 job.teardown();
             }
             inner.running = inner.running.saturating_sub(1);
-            inner.push_delivery("worker_done", job_id, outcome, text);
+            if announce {
+                inner.push_delivery("worker_done", job_id, outcome, text);
+            }
 
             // Anything sent while this worker was busy waited here rather than interrupting it or
             // being refused. It goes out now, on the slot the worker just gave back.
@@ -1334,7 +1420,7 @@ pub fn tools() -> Value {
                     "agent": {
                         "type": "string",
                         "enum": ["codex", "claude"],
-                        "description": "Which CLI runs the worker. Defaults to codex. A Claude worker runs without an approval channel (bypasses permissions) and does not yet report a live diff."
+                        "description": "Which CLI runs the worker. Defaults to codex. A Claude worker runs without an approval channel (bypasses permissions) and does not yet report a live diff. Each vendor meters a different set of windows - Codex a 5 hour and a weekly one, Claude those two plus a separate weekly budget for Opus - so how much room one has left says nothing about the other. Do not reason about that from here: every response these tools return carries a fitness block with the current reading and names the side with room in headroom. Read it and prefer that side when one is running out."
                     },
                     "cwd": { "type": "string", "description": "Working directory. Defaults to the lead's directory." },
                     "label": { "type": "string", "description": "A short name for this batch, in the user's words - what it is for, not how it is done. It is how the person watching tells one round of delegation from another." },
@@ -1469,7 +1555,147 @@ fn required_str(arguments: &Map<String, Value>, key: &str) -> Result<String, Str
         .ok_or_else(|| format!("{key} is required"))
 }
 
+/// The share of a window that counts as running out, matching `USAGE_FALLBACK_THRESHOLD` on the
+/// frontend so the planner's hint and the human's warning chip never disagree.
+const HEADROOM_THRESHOLD: f64 = 80.0;
+
+/// How close an agent is to its ceiling. Being rate-limited outranks any percentage: the window is
+/// not almost gone, it is gone.
+fn strain_of(snapshot: &Value) -> f64 {
+    let limited = snapshot
+        .get("rateLimited")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if limited {
+        return f64::MAX;
+    }
+    snapshot.get("used").and_then(Value::as_f64).unwrap_or(0.0)
+}
+
+fn past_threshold(snapshot: &Value) -> bool {
+    strain_of(snapshot) >= HEADROOM_THRESHOLD
+}
+
+/// The **most** strained agent past the threshold, not merely the first one found — when both sides
+/// are running out, the board has to name the same one on every call.
+fn strained_agent(block: &Value) -> Option<(String, f64, String)> {
+    block
+        .as_object()?
+        .iter()
+        .filter(|(agent, snapshot)| agent.as_str() != "headroom" && past_threshold(snapshot))
+        .max_by(|a, b| {
+            strain_of(a.1)
+                .partial_cmp(&strain_of(b.1))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|(agent, snapshot)| {
+            let used = snapshot.get("used").and_then(Value::as_f64).unwrap_or(0.0);
+            let window = snapshot
+                .get("worst")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            (agent.clone(), used, window)
+        })
+}
+
+/// Recorded on the worker so the board can show why it ran where it ran. `ignored` is the case
+/// worth seeing: the planner had this same reading in every earlier tool response and delegated
+/// into the strained side anyway.
+fn routing_note(block: &Value, requested: &str) -> Option<Value> {
+    let (agent, used, window) = strained_agent(block)?;
+    Some(json!({
+        "verdict": if requested == agent { "ignored" } else { "chosen" },
+        "agent": agent,
+        "window": window,
+        "used": used.round(),
+    }))
+}
+
+fn headroom_hint(block: &Value, requested: &str) -> Option<Value> {
+    let snapshot = block.get(requested)?;
+    let used = snapshot.get("used").and_then(Value::as_f64).unwrap_or(0.0);
+    let limited = snapshot
+        .get("rateLimited")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !limited && used < HEADROOM_THRESHOLD {
+        return None;
+    }
+    let other = block.get("headroom").and_then(Value::as_str)?;
+    if other == requested {
+        return None;
+    }
+    let other_snapshot = block.get(other)?;
+    let other_used = other_snapshot
+        .get("used")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0);
+    let window = snapshot
+        .get("worst")
+        .and_then(Value::as_str)
+        .unwrap_or("its");
+    let here = if limited {
+        format!("{requested} is rate-limited right now")
+    } else {
+        format!("{requested} is at {used:.0}% of its {window} window")
+    };
+    // Naming the roomier side without saying it is also nearly gone would read as "this one is
+    // fine", and it is not.
+    let both_strained = past_threshold(other_snapshot);
+    Some(json!({
+        "agent": other,
+        "bothStrained": both_strained,
+        "reason": if both_strained {
+            format!("{here}, and {other} is at {other_used:.0}% — both are running out; {other} has the most room left")
+        } else {
+            format!("{here}; {other} is at {other_used:.0}%")
+        }
+    }))
+}
+
+/// Every tool answers with the current per-agent headroom, because a tool result is the only
+/// channel this transport can push to the planner — see the roadmap's Phase 5 note on why a
+/// `tools/list_changed` notification is not an option here.
 pub fn call_tool(
+    core: &Core,
+    name: &str,
+    arguments: &Map<String, Value>,
+    planner: Option<&str>,
+) -> Result<Value, String> {
+    let mut value = dispatch_tool(core, name, arguments, planner)?;
+    let (Some(block), Some(map)) = (core.fitness_block(), value.as_object_mut()) else {
+        return Ok(value);
+    };
+    if name == "alethe_delegate" {
+        let requested = arguments
+            .get("agent")
+            .and_then(Value::as_str)
+            .unwrap_or("codex");
+        if let Some(note) = routing_note(&block, requested) {
+            let ids: Vec<String> = map
+                .get("jobs")
+                .and_then(Value::as_array)
+                .map(|jobs| {
+                    jobs.iter()
+                        .filter_map(|job| job.get("id").and_then(Value::as_str))
+                        .map(ToOwned::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default();
+            for id in ids {
+                core.set_job_routing(&id, note.clone());
+            }
+        }
+        if let Some(hint) = headroom_hint(&block, requested) {
+            map.insert("headroomHint".into(), hint);
+        }
+    }
+    map.insert("fitness".into(), block);
+    Ok(value)
+}
+
+fn dispatch_tool(
     core: &Core,
     name: &str,
     arguments: &Map<String, Value>,
@@ -1635,6 +1861,8 @@ pub fn call_tool(
                             child: None,
                             stdin: None,
                             inbox: VecDeque::new(),
+                            routing: None,
+                            awaiting_steer: false,
                             next_request_id: 10,
                         },
                     );
@@ -1735,14 +1963,38 @@ pub fn call_tool(
                     .jobs
                     .get_mut(&job_id)
                     .ok_or_else(|| format!("unknown job {job_id}"))?;
-                job.inbox.push_back(message);
-                let queued = job.inbox.len();
-                core.notify(&inner);
-                return Ok(json!({
-                    "queued": job_id,
-                    "waiting": queued,
-                    "note": "Claude workers queue a steer for the next turn instead of bending the current one"
-                }));
+                // Claude has no mid-turn steer: the only control message that reaches a running
+                // turn is `interrupt`. Queueing the correction first and aborting second gets the
+                // same result, because `finish_turn` hands the inbox straight back to the worker.
+                let live = job.status == STATUS_RUNNING;
+                let stdin = job.stdin.clone();
+                match (live, stdin) {
+                    (true, Some(stdin)) => {
+                        job.inbox.push_front(message);
+                        job.awaiting_steer = true;
+                        job.next_request_id += 1;
+                        let request_id = format!("{job_id}-interrupt-{}", job.next_request_id);
+                        core.notify(&inner);
+                        drop(inner);
+                        let request = json!({
+                            "type": "control_request",
+                            "request_id": request_id,
+                            "request": { "subtype": "interrupt" }
+                        });
+                        send_rpc(&stdin, &request)?;
+                        return Ok(json!({ "steered": job_id }));
+                    }
+                    _ => {
+                        job.inbox.push_back(message);
+                        let queued = job.inbox.len();
+                        core.notify(&inner);
+                        return Ok(json!({
+                            "queued": job_id,
+                            "waiting": queued,
+                            "note": "worker is not running a turn; the steer starts as its next one"
+                        }));
+                    }
+                }
             }
             let turn_id =
                 turn_id.ok_or_else(|| format!("job {job_id} has no running turn to steer"))?;
@@ -1866,6 +2118,44 @@ pub fn call_tool(
             let ids = string_list(arguments, "jobIds");
             let mut cancelled = Vec::new();
             for job_id in ids {
+                let claude = {
+                    let inner = guard(&core.inner);
+                    inner.jobs.get(&job_id).map(|job| job.agent == "claude")
+                };
+                if claude == Some(true) {
+                    // `cancel_queued` clears the CLI's own queue in the same round trip, so nothing
+                    // it was holding starts a turn between the abort and the teardown below.
+                    let staged = {
+                        let mut inner = guard(&core.inner);
+                        inner.jobs.get_mut(&job_id).and_then(|job| {
+                            job.awaiting_steer = false;
+                            job.next_request_id += 1;
+                            let request_id = format!("{job_id}-interrupt-{}", job.next_request_id);
+                            job.stdin.clone().map(|stdin| {
+                                (
+                                    stdin,
+                                    json!({
+                                        "type": "control_request",
+                                        "request_id": request_id,
+                                        "request": { "subtype": "interrupt", "cancel_queued": true }
+                                    }),
+                                )
+                            })
+                        })
+                    };
+                    if let Some((stdin, request)) = staged {
+                        let _ = send_rpc(&stdin, &request);
+                    }
+                    core.finish(
+                        &job_id,
+                        STATUS_CANCELLED,
+                        Some("cancelled".into()),
+                        "cancelled by the lead".into(),
+                        true,
+                    );
+                    cancelled.push(job_id);
+                    continue;
+                }
                 let payload = {
                     let inner = guard(&core.inner);
                     inner.jobs.get(&job_id).and_then(|job| {

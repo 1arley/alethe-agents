@@ -12,11 +12,33 @@ Notable user-facing changes to **Alethe** are documented here. The format is bas
 
 ### Added
 
+- **WSL terminals.** WSL (Windows Subsystem for Linux) is now available as a terminal type
+  alongside Shell in the new-terminal and new-tab pickers — it opens the default WSL distro in the
+  chosen folder. It behaves like a plain shell (no agent session, resume, or completion tracking)
+  and can be turned off in Preferences → Terminal like any other provider.
+
+- **Sidebar chat rows light up while the agent is thinking.** A chat that is busy answering now
+  keeps its full-color, active look in the Projects sidebar even when it is not the focused
+  terminal, so it is easy to spot which chats are still running. When the answer finishes in the
+  background, the spinner is replaced by a small `✓` glyph — the row goes back to the usual dimmed
+  style, with the check marking that a response is ready to be read.
+
+- **Cloud sync (free tier).** The Cloud card in Sync your data now works: sign in with your GitHub
+  account (device flow — no token to paste) and upload or download your preferences — name, theme,
+  UI settings and which plugins are enabled — across devices. The free tier covers preferences only;
+  full projects and stats sync stays reserved for the upcoming Premium plan. The card keeps showing
+  "Coming soon" until the build is configured with a sync server.
+- **Optional GitHub sign-in during onboarding.** When cloud sync is configured, the profile step
+  offers a real "Sign in with GitHub" (replacing the avatar-by-username import). Signing in fills
+  your name and photo from the account, restores preferences already stored in the cloud, and
+  uploads them when onboarding finishes. It is entirely optional — skipping it keeps the app fully
+  local, as before.
+
 - **Plugin system.** Alethe now loads features as plugins instead of hard-wiring every one of them
   into the app. Official plugins ship inside the installer, are on by default, and can be switched
-  off in Preferences → Multiagent → Plugins; turning one off removes its surfaces immediately, with
-  no restart. Each plugin declares what it needs in its manifest, and the app refuses anything it
-  did not ask for.
+  off in Preferences → Plugins; turning one off removes its surfaces immediately, with no
+  restart. Each plugin declares what it needs in its manifest, and the app refuses anything it did
+  not ask for.
 - **Themes can come from a plugin.** A plugin can now register a full theme — application palette,
   picker swatch, and terminal colors — without touching the app's stylesheet. Contributed colors are
   validated before they reach the page, so a theme can style the UI but cannot reach the network or
@@ -34,10 +56,50 @@ Notable user-facing changes to **Alethe** are documented here. The format is bas
 - **Ctrl+P now finds commands, not just terminals.** Plugin-contributed commands are listed above
   the terminal results and match on their own keywords. Git Control ships the first one: "Source
   Control", which reveals its panel on whichever side it is placed.
+- **Plugins are only loaded when you actually use them.** A plugin now announces its tabs and
+  commands in its manifest, so Alethe can draw them without running any of its code, and loads the
+  plugin the first time you open one of them. An installed plugin you never touch costs one small
+  file read at startup instead of running. Git Control is the first to work this way.
+- **Plugins can be installed from a folder.** A plugin dropped into the plugins folder is served
+  through an address that resolves only inside that plugin's own directory, with traversal and
+  symlink escapes refused. Nothing is loaded from the internet and nothing is evaluated from text.
+- **Import a plugin by picking its folder.** Preferences → Plugins → Import plugin opens a folder
+  picker and copies the plugin in, checking its manifest first and refusing anything that reaches
+  outside the folder you chose. The plugin arrives switched off — importing is not consent to run
+  it. Pasting a manifest by hand is still there, under Advanced.
+- **Todo List is now an official plugin.** The checklist works exactly as before — same panel, same
+  tags, same per-project assignment — but it can be turned off entirely, and its settings now open
+  from a button in its own panel instead of the sidebar toolbar. Its old switch in Preferences →
+  Features is gone; the plugin's switch replaces it, and if you had the feature turned off, it stays
+  off. Your list and your Todo folder are carried over on first run and also left untouched where
+  they were, so nothing is lost if you go back.
+- A todo assigned to a project you later delete now shows up as unassigned instead of disappearing
+  from the list while still counting towards the progress bar.
+- **Plugins can remember things.** A plugin now has its own storage, so what it holds survives
+  closing the app. It is kept apart from the plugin's own files, which means updating a plugin no
+  longer risks taking its data with it, and one plugin cannot read another's. Removing a plugin
+  removes what it stored.
+- **Plugins now have their own page in Preferences.** Every plugin is listed with its version, kind,
+  description, and whether it ships with Alethe or came from your disk, alongside a switch to turn it
+  on or off and the reason when one fails to load. Each entry spells out what the plugin is allowed
+  to do — add themes, add panes, add a sidebar tab, read and write Git state — in plain words instead
+  of manifest tokens. Enabling a plugin from your own disk now asks first, naming those permissions
+  and saying outright that nobody has reviewed it, and plugins installed that way can be uninstalled
+  from the same page, which also links straight to the plugins folder.
 
 
 ### Fixed
 
+- The "Browser" sub-option under Playwright browser in the onboarding feature list had no icon,
+  unlike every other row. It now shows the Browser module glyph, aligned with the icon column.
+- A plugin installed from disk never loaded on Windows: its files were requested at an address the
+  webview does not resolve there. It also failed silently, leaving an empty panel with no
+  explanation — a panel whose plugin failed to start now says so, and why.
+- A plugin whose folder name did not match its identifier appeared in the list but could never load
+  its code, failing with no explanation. Such a folder is now ignored outright.
+- A plugin folder dropped straight into the plugins directory started out enabled, skipping the
+  confirmation that was supposed to gate anything unreviewed. A local plugin now runs only after you
+  turn it on yourself.
 - Uninstalling a plugin used its display name instead of its identifier, so any plugin whose name
   differed from its id could not be removed.
 - The loading placeholder shown while a graph or markdown pane opened had no styling at all, because
@@ -51,6 +113,29 @@ Notable user-facing changes to **Alethe** are documented here. The format is bas
   preventing `\U` TOML parse errors from blocking the receiving session.
 
 ### Changed
+
+- **The lead agent can now see how much of each vendor's limit is left.** Every orchestrator tool
+  answers with the current headroom for Claude and Codex — which window is closest to full, when it
+  resets, the detected plan — so the agent doing the delegating decides with the same numbers the
+  usage widget shows you, instead of delegating blind. Ask it to send work to a side that is running
+  out and it is told which side has more room, with the figures behind the call — and when both
+  sides are running out it is told that too, rather than being pointed at an agent that is just as
+  close to its ceiling. It is still the one that chooses: Alethe reports, it never silently moves
+  work to another vendor.
+- **The board now shows why a worker ran where it ran.** When one agent is running out, the line
+  from a delegation to its worker is labelled with the reason — `chosen · codex week 91%` when the
+  lead went to the side with room, `ignored hint · codex week 91%` when it sent work into the
+  strained one anyway. Lines stay clean when both sides had room, so a label always means something.
+
+- **The quota warning no longer misses a worker that ran out for the week.** It compared only the
+  5-hour window, so an agent sitting at 60% of its weekly limit while comfortable on the hour raised
+  no warning at all. Both the chip and the lead agent now read whichever window is closest to full.
+
+- **Correcting a Claude worker now actually stops it.** Steering one used to wait out whatever it was
+  already doing and only apply the correction on the following turn — precisely when the run was
+  going the wrong way. The correction now interrupts the turn in flight and starts as the next one,
+  the same way steering a Codex worker already behaved. Cancelling a Claude worker also clears
+  anything it still had queued, so nothing starts a last turn on the way out.
 
 - A pane whose type has no provider — because the plugin that supplies it is disabled — now says
   so instead of quietly turning into a terminal pointed at that pane's folder.

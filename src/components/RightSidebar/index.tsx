@@ -3,12 +3,10 @@ import {
   ArrowLeft,
   ClipboardCopy,
   FileText,
-  ListTodo,
   Maximize2,
   PanelRightClose,
   Plug,
   RefreshCw,
-  Settings,
   Sparkles,
   X,
 } from 'lucide-react'
@@ -23,12 +21,16 @@ import {
   useState,
 } from 'react'
 
-import { type GsdSyncSession, useGsdSyncSessions } from '../../hooks/useGsdSyncSessions'
+import {
+  type GsdSyncSession,
+  useGsdSyncAvailable,
+  useGsdSyncSessions,
+} from '../../hooks/useGsdSyncSessions'
 import { hasFileDragPayload, readFileDragPayload } from '../../lib/fileDrag'
 import { useT } from '../../lib/i18n'
-import { sidebarTabLabel, useSidebarTabs } from '../../lib/plugins'
 import { isMarkdownPath } from '../../lib/markdownSidebarHistory'
 import { basename } from '../../lib/paths'
+import { sidebarTabLabel, sidebarTabPanelLabel } from '../../lib/plugins'
 import {
   listProjectPlans,
   type PlanningStatus,
@@ -36,12 +38,13 @@ import {
   readTextFile,
   writeClipboardText,
 } from '../../lib/tauri'
+import { useSidebarViews } from '../../lib/viewPlacement'
 import { selectActiveProject, useProjectsStore } from '../../stores/projectsStore'
 import { useUiStore } from '../../stores/uiStore'
 
 const MarkdownRenderer = lazy(() => import('../MarkdownPane/MarkdownRenderer').then(m => ({ default: m.MarkdownRenderer })))
+import { ContributedView } from '../ContributedView'
 import { McpPanel } from '../McpPanel'
-import { TodoSidebar } from '../TodoSidebar'
 import { DotmCircular2 } from '../ui/dotm-circular-2'
 import styles from './RightSidebar.module.css'
 
@@ -50,7 +53,6 @@ const markdownScrollPositions = new Map<string, number>()
 export function RightSidebar() {
   const t = useT()
   const mode = useUiStore((state) => state.rightSidebarMode)
-  const setMode = useUiStore((state) => state.showTodoSidebar)
   const openMarkdown = useUiStore((state) => state.showMarkdownSidebar)
   const setRightSidebarMode = useUiStore((state) => state.setRightSidebarMode)
   const showGsdSyncSidebar = useUiStore((state) => state.showGsdSyncSidebar)
@@ -69,40 +71,25 @@ export function RightSidebar() {
   const sidebarSubTab = sidebarTerminal?.tabs.find((tab) => tab.id === sidebarTerminal.activeTabId)
     ?? sidebarTerminal?.tabs[0]
 
-  const contributedTabs = useSidebarTabs('right')
+  const contributedTabs = useSidebarViews('right')
   const contributedTab = contributedTabs.find((tab) => tab.id === mode)
-  const todoEnabled = preferences.enabledFeatures.todos
   const mcpEnabled = preferences.enabledFeatures.mcp
+  const gsdSyncAvailable = useGsdSyncAvailable()
   // The panel now survives its features being turned off one by one, so a mode whose
   // feature was disabled has to fall back instead of rendering a hidden feature.
   useEffect(() => {
     const modeStillEnabled =
       mode === 'markdown' ||
-      mode === 'gsdSync' ||
-      (mode === 'todo' && todoEnabled) ||
+      (mode === 'gsdSync' && gsdSyncAvailable) ||
       (mode === 'mcp' && mcpEnabled) ||
       contributedTabs.some((tab) => tab.id === mode)
     if (modeStillEnabled) return
-    if (todoEnabled) setMode()
-    else openMarkdown()
-  }, [contributedTabs, mcpEnabled, mode, openMarkdown, setMode, todoEnabled])
+    openMarkdown()
+  }, [contributedTabs, gsdSyncAvailable, mcpEnabled, mode, openMarkdown])
 
   return (
     <aside className={styles.sidebar} aria-label={t('rightSidebar.navigation')}>
       <div className={styles.sidebarTabs} role="tablist" aria-label={t('rightSidebar.navigation')}>
-        {todoEnabled ? (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'todo'}
-            className={`${styles.sidebarTab} ${mode === 'todo' ? styles.sidebarTabActive : ''}`}
-            onClick={setMode}
-            title={t('todo.title')}
-          >
-            <ListTodo size={14} />
-            <span>{t('rightSidebar.todoTab')}</span>
-          </button>
-        ) : null}
         <button
           type="button"
           role="tab"
@@ -114,17 +101,19 @@ export function RightSidebar() {
           <FileText size={14} />
           <span>{t('rightSidebar.markdownTab')}</span>
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'gsdSync'}
-          className={`${styles.sidebarTab} ${mode === 'gsdSync' ? styles.sidebarTabActive : ''}`}
-          onClick={showGsdSyncSidebar}
-          title={t('rightSidebar.gsdSyncTab')}
-        >
-          <Sparkles size={14} />
-          <span>{t('rightSidebar.gsdSyncTab')}</span>
-        </button>
+        {gsdSyncAvailable ? (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'gsdSync'}
+            className={`${styles.sidebarTab} ${mode === 'gsdSync' ? styles.sidebarTabActive : ''}`}
+            onClick={showGsdSyncSidebar}
+            title={t('rightSidebar.gsdSyncTab')}
+          >
+            <Sparkles size={14} />
+            <span>{t('rightSidebar.gsdSyncTab')}</span>
+          </button>
+        ) : null}
         {contributedTabs.map((tab) => {
           const TabIcon = tab.icon
           const label = sidebarTabLabel(t, tab)
@@ -157,17 +146,6 @@ export function RightSidebar() {
           </button>
         ) : null}
         <span className={styles.toolbarSpacer} />
-        {mode === 'todo' && todoEnabled ? (
-          <button
-            type="button"
-            className={styles.toolbarUtility}
-            onClick={() => openModal('todoSettings')}
-            title={t('todo.openSettings')}
-            aria-label={t('todo.openSettings')}
-          >
-            <Settings size={14} />
-          </button>
-        ) : null}
         {mode === 'mcp' && mcpEnabled ? (
           <button
             type="button"
@@ -192,16 +170,22 @@ export function RightSidebar() {
       </div>
       <div className={styles.tabContent}>
         {mode === 'markdown' ? <MarkdownSidebarViewer /> : null}
-        {mode === 'todo' && todoEnabled ? <TodoSidebar /> : null}
-        {mode === 'gsdSync' ? <GsdSyncSidebarContent /> : null}
+        {mode === 'gsdSync' && gsdSyncAvailable ? <GsdSyncSidebarContent /> : null}
         {mode === 'mcp' && mcpEnabled ? <McpPanel /> : null}
         {contributedTab ? (
-          <contributedTab.component
-            projectId={activeProject?.id ?? null}
-            cwd={sidebarSubTab?.cwd || sidebarTerminal?.cwd || null}
-            ptyId={sidebarSubTab?.ptyId ?? null}
-            terminalName={sidebarTerminal?.name ?? null}
-          />
+          <section className={styles.contributedPanel}>
+            <header className={styles.panelHeader}>
+              <contributedTab.icon size={15} />
+              <span>{sidebarTabPanelLabel(t, contributedTab)}</span>
+            </header>
+            <ContributedView
+              view={contributedTab}
+              projectId={activeProject?.id ?? null}
+              cwd={sidebarSubTab?.cwd || sidebarTerminal?.cwd || null}
+              ptyId={sidebarSubTab?.ptyId ?? null}
+              terminalName={sidebarTerminal?.name ?? null}
+            />
+          </section>
         ) : null}
       </div>
     </aside>

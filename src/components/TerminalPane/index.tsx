@@ -31,8 +31,9 @@ import {
   restartPty,
   snapshotCodexSessions,
 } from '../../lib/tauri'
+import { resolveAgentCliCommand } from '../../lib/agentProviders'
 import {
-  agentCliCommand,
+  isShellAgentType,
   type AgentType,
   type SubTab,
   type Terminal as TerminalEntry,
@@ -169,7 +170,7 @@ export const TerminalPane = memo(function TerminalPane({
 
   const effectiveLaneVisible = terminal.tabs.length > 1 ? true : terminal.laneVisible === true
   const topbarPinned = terminal.topbarPinned !== false
-  const isShell = activeTab?.type === 'shell'
+  const isShell = activeTab ? isShellAgentType(activeTab.type) : false
   const showFloatingIdentity = Boolean(activeTab && (!isShell || topbarPinned))
   const showLeftFloating = showFloatingIdentity || (canDragPane && !isShell)
 
@@ -246,7 +247,7 @@ export const TerminalPane = memo(function TerminalPane({
         id: ptyId,
         cols: 80,
         rows: 24,
-        command: agentCliCommand(activeTab.type),
+        command: resolveAgentCliCommand(activeTab.type),
         cwd: restartCwd || undefined,
         extraArgs: launch.args,
         env: preparedRuntime.env,
@@ -517,7 +518,7 @@ export const TerminalPane = memo(function TerminalPane({
               >
                 {effectiveLaneVisible ? <PanelLeftClose size={12} /> : <PanelLeftOpen size={12} />}
               </button>
-              {activeTab && activeTab.type !== 'shell' ? (
+              {activeTab && !isShellAgentType(activeTab.type) ? (
                 <button
                   type="button"
                   className={styles.action}

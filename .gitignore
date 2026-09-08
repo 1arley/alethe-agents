@@ -21,6 +21,8 @@ Thumbs.db
 src-tauri/target/
 # npm run test:e2e:build sets CARGO_TARGET_DIR=target-e2e (multi-GB).
 src-tauri/target-e2e/
+# Tests run here while `tauri dev` holds a lock on target/'s alethe.exe.
+src-tauri/target-test/
 src-tauri/gen/
 
 # libghostty pré-buildado — não versionado (binário ~39MB). Reconstruído por

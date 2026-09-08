@@ -1,7 +1,11 @@
 import { nanoid } from 'nanoid'
 
-import { legacyGitFeatureFlag, normalizeEnabledFeatures } from '../lib/features'
-import { recordLegacyGitFlag } from '../lib/plugins/legacyMigration'
+import {
+  legacyGitFeatureFlag,
+  legacyTodosFeatureFlag,
+  normalizeEnabledFeatures,
+} from '../lib/features'
+import { recordLegacyGitFlag, recordLegacyTodosFlag } from '../lib/plugins/legacyMigration'
 import { normalizePort } from '../lib/router9'
 import { normalizeAppIconTheme } from '../lib/themeIcons'
 import { normalizeTodoTags, normalizeTodoTitle } from '../lib/todos'
@@ -62,9 +66,28 @@ function normalizeStoredAccents(file: ProjectsFile): ProjectsFile {
   }
 }
 
+/**
+ * Placement used to be a single Git-only setting. It is a per-view override
+ * now, so the old value is folded in once and then ignored.
+ */
+function normalizeViewPlacements(
+  preferences: Preferences & { gitControlPlacement?: 'left' | 'right' },
+): Record<string, 'left' | 'right'> {
+  const stored = preferences.viewPlacements
+  const placements: Record<string, 'left' | 'right'> = {}
+  for (const [id, side] of Object.entries(stored ?? {})) {
+    if (side === 'left' || side === 'right') placements[id] = side
+  }
+  if (placements.git === undefined && preferences.gitControlPlacement === 'right') {
+    placements.git = 'right'
+  }
+  return placements
+}
+
 export function normalizePreferences(raw: LegacyPreferences | undefined): Preferences {
   // Git Control became a plugin; its old toggle is handed to the plugin host.
   recordLegacyGitFlag(legacyGitFeatureFlag(raw))
+  recordLegacyTodosFlag(legacyTodosFeatureFlag(raw))
   const preferences = {
     ...DEFAULT_PREFERENCES,
     ...(raw ?? {}),
@@ -108,7 +131,7 @@ export function normalizePreferences(raw: LegacyPreferences | undefined): Prefer
     motionPreference: raw?.motionPreference === 'reduced' ? 'reduced' : 'animated',
     accountCreated: legacyAccountCreated,
     topbarStyle: preferences.topbarStyle === 'three-areas' ? 'three-areas' : 'classic',
-    gitControlPlacement: preferences.gitControlPlacement === 'right' ? 'right' : 'left',
+    viewPlacements: normalizeViewPlacements(preferences),
     mcpDefaultScope: preferences.mcpDefaultScope === 'project' ? 'project' : 'global',
     mcpOnboardingSeen: Boolean(preferences.mcpOnboardingSeen),
     setupWalkthrough: {

@@ -73,7 +73,8 @@ import {
   worktreeFetchBranch,
   worktreeRemove,
 } from '../../lib/tauri'
-import { parseAgentType, type Project, type Terminal, type Theme } from '../../lib/types'
+import { parseAgentType } from '../../lib/agentProviders'
+import type { Project, Terminal, Theme } from '../../lib/types'
 import { useAgentCanvasStore } from '../../stores/agentCanvasStore'
 import { useProjectsStore } from '../../stores/projectsStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -1435,6 +1436,28 @@ export const OrchestratorPane = memo(function OrchestratorPane({
                         />
                       ))}
                     </svg>
+
+                    {graph.edges.map((edge) =>
+                      edge.note ? (
+                        <span
+                          key={`${edge.id}-note`}
+                          className={styles.edgeNote}
+                          data-verdict={edge.note.verdict}
+                          style={{ left: edge.note.x, top: edge.note.y }}
+                        >
+                          {t(
+                            edge.note.verdict === 'ignored'
+                              ? 'orchestrator.routingIgnored'
+                              : 'orchestrator.routingChosen',
+                            {
+                              agent: edge.note.agent,
+                              window: edge.note.window,
+                              used: String(edge.note.used),
+                            },
+                          )}
+                        </span>
+                      ) : null,
+                    )}
 
                     {graph.planner && activeGroup && (
                       <PlannerNode

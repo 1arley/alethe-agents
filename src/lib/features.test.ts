@@ -1,55 +1,59 @@
 import { describe, expect, it } from 'vitest'
 
-import { legacyGitFeatureFlag, normalizeEnabledFeatures } from './features'
+import {
+  legacyGitFeatureFlag,
+  legacyTodosFeatureFlag,
+  normalizeEnabledFeatures,
+} from './features'
 
 describe('normalizeEnabledFeatures', () => {
   it('enables the initial modules for a fresh profile', () => {
     expect(normalizeEnabledFeatures(undefined)).toEqual({
-      todos: true,
       browser: true,
       graphify: true,
       aiMemory: false,
       mcp: true,
       playwright: false,
       orchestrator: false,
+      gsdSync: false,
     })
   })
 
-  it('keeps Todo off for existing profiles', () => {
+  it('keeps the defaults for an existing profile', () => {
     expect(normalizeEnabledFeatures({ showGitControl: false })).toEqual({
-      todos: false,
       browser: true,
       graphify: true,
       aiMemory: false,
       mcp: true,
       playwright: false,
       orchestrator: false,
+      gsdSync: false,
     })
   })
 
   it('preserves explicit modular preferences', () => {
-    expect(normalizeEnabledFeatures({ enabledFeatures: { todos: false } })).toEqual({
-      todos: false,
+    expect(normalizeEnabledFeatures({ enabledFeatures: { graphify: false } })).toEqual({
       browser: true,
-      graphify: true,
+      graphify: false,
       aiMemory: false,
       mcp: true,
       playwright: false,
       orchestrator: false,
+      gsdSync: false,
     })
   })
 
   it('keeps AI Memory off unless explicitly enabled', () => {
     expect(
-      normalizeEnabledFeatures({ enabledFeatures: { todos: true, aiMemory: true } }),
+      normalizeEnabledFeatures({ enabledFeatures: { aiMemory: true } }),
     ).toEqual({
-      todos: true,
       browser: true,
       graphify: true,
       aiMemory: true,
       mcp: true,
       playwright: false,
       orchestrator: false,
+      gsdSync: false,
     })
   })
 
@@ -58,6 +62,11 @@ describe('normalizeEnabledFeatures', () => {
     expect(normalizeEnabledFeatures({ enabledFeatures: { playwright: true } }).playwright).toBe(
       true,
     )
+  })
+
+  it('keeps GSD Sync off unless explicitly enabled', () => {
+    expect(normalizeEnabledFeatures(undefined).gsdSync, 'OpenCode-only, and it polls').toBe(false)
+    expect(normalizeEnabledFeatures({ enabledFeatures: { gsdSync: true } }).gsdSync).toBe(true)
   })
 
   it('keeps orchestration off unless explicitly enabled', () => {
@@ -90,5 +99,22 @@ describe('legacyGitFeatureFlag', () => {
   it('is undefined for a profile that never had the feature flag', () => {
     expect(legacyGitFeatureFlag(undefined)).toBeUndefined()
     expect(legacyGitFeatureFlag({ enabledFeatures: { todos: true } })).toBeUndefined()
+  })
+})
+
+describe('legacyTodosFeatureFlag', () => {
+  it('carries an explicit choice over to the plugin', () => {
+    expect(legacyTodosFeatureFlag({ enabledFeatures: { todos: false } })).toBe(false)
+    expect(legacyTodosFeatureFlag({ enabledFeatures: { todos: true } })).toBe(true)
+  })
+
+  it('leaves a fresh profile at the plugin default', () => {
+    expect(legacyTodosFeatureFlag(undefined)).toBeUndefined()
+  })
+
+  it('keeps Todo off for a profile that predates the feature flag', () => {
+    // It used to be on only for fresh profiles; undefined here would switch the
+    // tab on for someone who never had it.
+    expect(legacyTodosFeatureFlag({ showGitControl: false })).toBe(false)
   })
 })

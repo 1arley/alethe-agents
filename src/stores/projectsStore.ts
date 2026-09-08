@@ -30,7 +30,6 @@ import {
   type SubTab,
   type Terminal,
   type Theme,
-  type TodoItem,
   type WorkspaceContainer,
   type WorkspaceRecentTab,
   type WorkspaceTab,
@@ -50,7 +49,6 @@ import { createGroupsSlice, createProjectsSlice } from './projectsStore.projectS
 import {
   createPreferencesSlice,
   createSubTabsSlice,
-  createTodosSlice,
 } from './projectsStore.slices'
 import { createContainersSlice, createTerminalsSlice } from './projectsStore.terminalSlices'
 import { createWorkspaceSlice } from './projectsStore.workspaceSlices'
@@ -177,14 +175,6 @@ export type ProjectsState = ProjectsFile & {
   setGroupGridLayout: (groupId: string, layout: GridLayout, recordHistory?: boolean) => void
   setWorkspaceGridLayout: (layout: GridLayout | null, recordHistory?: boolean) => void
 
-  createTodo: (title: string, tags?: string[], projectId?: string) => TodoItem | null
-  renameTodo: (id: string, title: string) => void
-  updateTodoTags: (id: string, tags: string[]) => void
-  setTodoProject: (id: string, projectId: string | null) => void
-  resetTodosToDefault: () => void
-  toggleTodo: (id: string) => void
-  deleteTodo: (id: string) => void
-  reorderTodo: (draggedId: string, targetId: string) => void
 
   // terminals
   createTerminal: (
@@ -725,7 +715,6 @@ export const useProjectsStore = create<ProjectsState>((set, get) => {
     ...createWorkspaceSlice(sliceCtx),
     ...createTerminalsSlice(sliceCtx),
     ...createContainersSlice(sliceCtx),
-    ...createTodosSlice(sliceCtx),
     ...createSubTabsSlice(sliceCtx),
     ...createPreferencesSlice(sliceCtx),
   }

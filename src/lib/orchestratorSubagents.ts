@@ -26,6 +26,8 @@ export function nativeSubagentJobs(nodes: readonly AgentNode[]): OrchestratorJob
     status: statusOf(node),
     threadId: null,
     outcome: node.result,
+    // Alethe never picked an agent for these: the planner spawned them inside its own process.
+    routing: null,
     seconds: node.endedAt
       ? Math.round((node.endedAt - node.startedAt) / 1000)
       : Math.round((Date.now() - node.startedAt) / 1000),

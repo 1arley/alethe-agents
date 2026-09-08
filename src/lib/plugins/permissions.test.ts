@@ -61,6 +61,11 @@ describe('canInvoke', () => {
       'delete_filesystem_entry',
       'mcp_reveal_env',
       'plugin_set_enabled',
+      'plugin_import_dir',
+      // Storage is reachable only through `context.storage`, which binds the
+      // caller's own id; invokable, it would be a cross-plugin read and write.
+      'plugin_storage_read',
+      'plugin_storage_write',
     ]) {
       expect(canInvoke(['invoke:*'], command)).toBe(false)
     }

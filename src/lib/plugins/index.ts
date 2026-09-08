@@ -1,35 +1,45 @@
-import { useMemo, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 
 import { getPluginEntries, subscribePlugins } from './host'
-import { sidebarTabContributions, useContributions } from './registry'
-import type { PluginRuntimeEntry, SidebarSide, SidebarTabContribution } from './types'
+import type { PluginRuntimeEntry } from './types'
 
+export { PLUGIN_API_VERSION } from './constants'
 export {
+  activateForView,
+  activationEvents,
+  ensureActivated,
   getPluginEntries,
   initPluginHost,
-  PLUGIN_API_VERSION,
   refreshLocalPlugins,
+  runCommand,
   setPluginEnabled,
   subscribePlugins,
 } from './host'
+export { isKnownPluginIcon, pluginIcon } from './icons'
 export { commandLabel, sidebarTabLabel, sidebarTabPanelLabel } from './labels'
 export {
   applyLegacyPluginMigrations,
   GIT_CONTROL_PLUGIN_ID,
   recordLegacyGitFlag,
+  recordLegacyTodosFlag,
+  TODOS_PLUGIN_ID,
 } from './legacyMigration'
+export type { AletheGlobal } from './localTransport'
 export { canInvoke, capabilityMatches, grants, isValidCapability } from './permissions'
 export {
   commandContributions,
   ContributionList,
+  modalContributions,
   paneContributions,
   sidebarTabContributions,
   themeContributions,
   useContributions,
 } from './registry'
+export type { PluginStorage } from './storage'
 export type {
   CommandContribution,
   Disposable,
+  ModalContribution,
   PaneContribution,
   PaneProps,
   PluginContext,
@@ -44,13 +54,4 @@ export type {
 
 export function usePlugins(): readonly PluginRuntimeEntry[] {
   return useSyncExternalStore(subscribePlugins, getPluginEntries, getPluginEntries)
-}
-
-/** Tabs contributed to one sidebar, in display order. */
-export function useSidebarTabs(side: SidebarSide): readonly SidebarTabContribution[] {
-  const all = useContributions(sidebarTabContributions)
-  return useMemo(
-    () => all.filter((tab) => tab.side === side).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
-    [all, side],
-  )
 }

@@ -37,7 +37,12 @@ const FORBIDDEN_COMMANDS = new Set([
   'run_validation',
   'plugin_install',
   'plugin_uninstall',
+  'plugin_import_dir',
   'plugin_set_enabled',
+  // Reachable only through `context.storage`, which binds the caller's own id.
+  // Left invokable, a plugin could read and overwrite another plugin's record.
+  'plugin_storage_read',
+  'plugin_storage_write',
   'save_projects',
   'write_text_file',
   'delete_filesystem_entry',

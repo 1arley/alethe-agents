@@ -12,7 +12,8 @@ import {
 } from '../lib/terminalFactory'
 import { cleanupPtys } from '../lib/terminalLifecycle'
 import type { Group, Project } from '../lib/types'
-import { agentCliCommand, GROUP_COLORS } from '../lib/types'
+import { resolveAgentCliCommand } from '../lib/agentProviders'
+import { GROUP_COLORS } from '../lib/types'
 import { sanitizeWorkspaceSnapshot } from '../lib/workspaceNavigation'
 import type { ProjectsState } from './projectsStore'
 import { collectGroupProjectIds } from './projectsStore.migrations'
@@ -557,7 +558,7 @@ export function createProjectsSlice({ set, get, update, updateProject }: SliceCt
               id: tab.ptyId,
               cols: 80,
               rows: 24,
-              command: agentCliCommand(tab.type),
+              command: resolveAgentCliCommand(tab.type),
               cwd: info.path,
               extraArgs: launch.args,
               env: runtime.env,
@@ -663,7 +664,11 @@ export function createProjectsSlice({ set, get, update, updateProject }: SliceCt
                                                                                 
                                                            
             const gsdWatcherEnabled = gsdWatcherEnabledOverride ?? project.gsdWatcherEnabled
-            if (gsdWatcherEnabled && terminal.tabs.some((tab) => tab.type === 'opencode')) {
+            if (
+              gsdWatcherEnabled &&
+              get().preferences.enabledFeatures.gsdSync &&
+              terminal.tabs.some((tab) => tab.type === 'opencode')
+            ) {
               const modelChain = get().preferences.gsdSyncModelChain ?? []
               await gsdOpenCodePluginWrite(info.path, modelChain).catch((error) => {
                 console.error(
@@ -698,7 +703,7 @@ export function createProjectsSlice({ set, get, update, updateProject }: SliceCt
                   id: tab.ptyId,
                   cols: 80,
                   rows: 24,
-                  command: agentCliCommand(tab.type),
+                  command: resolveAgentCliCommand(tab.type),
                   cwd: info.path,
                   extraArgs: launch.args,
                   env: runtime.env,
@@ -871,12 +876,6 @@ export function createProjectsSlice({ set, get, update, updateProject }: SliceCt
         if (!project) return
         cleanupPtys(collectTerminalPtyIds(project.terminals))
         const projects = state.projects.filter((p) => p.id !== id)
-        const todos = state.todos.map((item) => {
-          if (item.projectId !== id) return item
-          const next = { ...item }
-          delete next.projectId
-          return next
-        })
         const groups = state.groups.map((g) =>
           g.id === project.groupId
             ? { ...g, projectIds: g.projectIds.filter((pid) => pid !== id) }
@@ -914,7 +913,6 @@ export function createProjectsSlice({ set, get, update, updateProject }: SliceCt
           }))
         return {
           projects,
-          todos,
           groups,
           ungroupedOrder,
           workspace: {

@@ -8,12 +8,20 @@ import { useUiStore } from '../../stores/uiStore'
 import { GitControl } from './GitControl'
 import styles from './GitTabs.module.css'
 
-/** Left sidebar: the shell already draws the panel header. */
-export function GitLeftTab({ projectId, cwd, ptyId, terminalName }: SidebarTabProps) {
+/** The shell draws the panel header; this renders the panel body only. */
+export function GitTab({ projectId, cwd, ptyId, terminalName }: SidebarTabProps) {
   const t = useT()
   const openModal = useUiStore((state) => state.openModal_)
+  const project = useProjectsStore((state) =>
+    projectId ? state.projects.find((candidate) => candidate.id === projectId) : undefined,
+  )
 
-  if (!projectId || !cwd) {
+  // Source Control follows the selected project rather than requiring an open
+  // terminal, so a project with no terminal still reports its git status.
+  const resolvedCwd = cwd || project?.defaultCwd
+  const resolvedName = terminalName || project?.name || ''
+
+  if (!project || !resolvedCwd) {
     return (
       <div className={styles.empty}>
         <EmptyState
@@ -32,48 +40,10 @@ export function GitLeftTab({ projectId, cwd, ptyId, terminalName }: SidebarTabPr
 
   return (
     <GitControl
-      projectId={projectId}
-      cwd={cwd}
+      projectId={project.id}
+      cwd={resolvedCwd}
       ptyId={ptyId}
-      terminalName={terminalName ?? ''}
+      terminalName={resolvedName}
     />
-  )
-}
-
-/** Right sidebar: draws its own header, and works without an open terminal. */
-export function GitRightTab({ projectId, cwd, ptyId, terminalName }: SidebarTabProps) {
-  const t = useT()
-  const project = useProjectsStore((state) =>
-    projectId ? state.projects.find((candidate) => candidate.id === projectId) : undefined,
-  )
-  // Source Control follows the SELECTED project rather than requiring an open
-  // terminal, so a project with no terminal still reports its git status.
-  const resolvedCwd = cwd || project?.defaultCwd
-  const resolvedName = terminalName || project?.name || ''
-
-  return (
-    <>
-      <header className={styles.panelHeader}>
-        <GitBranch size={15} />
-        <span>{t('ui.sidebar.sourceControl')}</span>
-      </header>
-      {project && resolvedCwd ? (
-        <GitControl
-          projectId={project.id}
-          cwd={resolvedCwd}
-          ptyId={ptyId}
-          terminalName={resolvedName}
-        />
-      ) : (
-        <div className={styles.empty}>
-          <EmptyState
-            compact
-            icon={<GitBranch size={18} />}
-            title={t('git.empty.noTerminal')}
-            description={t('git.empty.noTerminalDesc')}
-          />
-        </div>
-      )}
-    </>
   )
 }

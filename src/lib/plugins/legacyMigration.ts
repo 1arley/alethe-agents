@@ -1,8 +1,10 @@
 import { setPluginEnabled } from './host'
 
 export const GIT_CONTROL_PLUGIN_ID = 'alethe.git-control'
+export const TODOS_PLUGIN_ID = 'alethe.todos'
 
 let pendingGitFlag: boolean | undefined
+let pendingTodosFlag: boolean | undefined
 
 /**
  * Records the pre-plugin `enabledFeatures.git` value seen while loading a
@@ -14,12 +16,20 @@ export function recordLegacyGitFlag(value: boolean | undefined): void {
   pendingGitFlag = value
 }
 
+export function recordLegacyTodosFlag(value: boolean | undefined): void {
+  if (value === undefined) return
+  pendingTodosFlag = value
+}
+
 /**
  * Carries the old Git feature toggle over to the plugin's enabled state, once
  * per profile load. Safe to call whenever hydration finishes.
  */
 export async function applyLegacyPluginMigrations(): Promise<void> {
-  const flag = pendingGitFlag
+  const gitFlag = pendingGitFlag
+  const todosFlag = pendingTodosFlag
   pendingGitFlag = undefined
-  if (flag === false) await setPluginEnabled(GIT_CONTROL_PLUGIN_ID, false)
+  pendingTodosFlag = undefined
+  if (gitFlag === false) await setPluginEnabled(GIT_CONTROL_PLUGIN_ID, false)
+  if (todosFlag === false) await setPluginEnabled(TODOS_PLUGIN_ID, false)
 }

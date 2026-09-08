@@ -4,7 +4,8 @@ import { registerSessionClaim, releaseSessionClaim } from './sessionDiscovery'
 import { buildAgentLaunch } from './sessionLaunch'
 import { saveSession } from './sessionResume'
 import { agentHooksSettingsPath, restartPty } from './tauri'
-import { agentCliCommand, type AgentRuntimeProfile, type AgentType } from './types'
+import { resolveAgentCliCommand } from './agentProviders'
+import type { AgentRuntimeProfile, AgentType } from './types'
 
 export type ResumeSessionInPaneParams = {
   agent: AgentType
@@ -61,7 +62,7 @@ export async function resumeSessionInPane({
     id: ptyId,
     cols: 80,
     rows: 24,
-    command: agentCliCommand(agent),
+    command: resolveAgentCliCommand(agent),
     cwd: cwd || undefined,
     extraArgs: launch.args,
     env: prepared.env,

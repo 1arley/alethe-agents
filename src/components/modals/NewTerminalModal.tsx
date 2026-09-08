@@ -16,12 +16,12 @@ import { basename, pathSegments } from '../../lib/paths'
 import { formatShortcut } from '../../lib/platform'
 import { router9SupportsAgent } from '../../lib/router9'
 import {
-  AGENT_TYPE_LABELS,
-  type AgentRuntimeProfile,
-  type AgentType,
-  ALL_AGENT_TYPES,
-  UNRESTRICTED_FLAG,
-} from '../../lib/types'
+  agentLabel,
+  isAgentEnabled,
+  resolveUnrestrictedFlag,
+  useAgentTypes,
+} from '../../lib/agentProviders'
+import { isShellAgentType, type AgentRuntimeProfile, type AgentType } from '../../lib/types'
 import { getProjectDefaultCwd, useProjectsStore } from '../../stores/projectsStore'
 import { useUiStore } from '../../stores/uiStore'
 import { AgentIcon } from '../icons/AgentIcons'
@@ -29,11 +29,6 @@ import controls from './controls.module.css'
 import { Modal } from './Modal'
 import styles from './NewTerminalModal.module.css'
 import { RowSelect, type RowSelectOption } from './RowSelect'
-
-const AGENTS: { type: AgentType; label: string }[] = ALL_AGENT_TYPES.map((type) => ({
-  type,
-  label: AGENT_TYPE_LABELS[type],
-}))
 
 const PLANNER_AGENTS: AgentType[] = ['claude', 'codex']
 
@@ -82,28 +77,21 @@ export function NewTerminalModal() {
   const [createMore, setCreateMore] = useState(false)
   const [runtimeProfile, setRuntimeProfile] = useState<AgentRuntimeProfile>('lean')
   const [cwd, setCwd] = useState('')
-  const [unrestricted, setUnrestricted] = useState<Record<AgentType, boolean>>({
-    shell: false,
-    claude: false,
-    codex: false,
-    copilot: false,
-    antigravity: false,
-    opencode: false,
-    freebuff: false,
-    mimo: false,
-    kiro: false,
-  })
+  const [unrestricted, setUnrestricted] = useState<Partial<Record<AgentType, boolean>>>({})
 
   const only = context?.only
   const isPlannerContext = context?.titleKey === 'term.newPlannerTitle'
-  const visibleAgents = AGENTS.filter((a) => enabled[a.type] && (!only || only.includes(a.type)))
+  const allAgents = useAgentTypes().map((type) => ({ type, label: agentLabel(type) }))
+  const visibleAgents = allAgents.filter(
+    (agent) => isAgentEnabled(enabled, agent.type) && (!only || only.includes(agent.type)),
+  )
   const plannerAgents = visibleAgents.filter((a) => PLANNER_AGENTS.includes(a.type))
   const canOrchestrate = !isPlannerContext && plannerAgents.length > 0
   const orchestrating = canOrchestrate && mode === 'orchestration'
   const modeAgents = orchestrating ? plannerAgents : visibleAgents
   const defaultType =
     visibleAgents.find((agent) => agent.type === 'claude')?.type ?? visibleAgents[0]?.type ?? 'shell'
-  const selectedAgent = AGENTS.find((agent) => agent.type === type) ?? AGENTS[0]
+  const selectedAgent = allAgents.find((agent) => agent.type === type) ?? allAgents[0]
   const inheritedCwd = useMemo(() => getProjectDefaultCwd(project, projects), [project, projects])
   const recentFolders = useMemo(() => {
     const folders = new Map<string, { path: string; lastUsedAt: number }>()
@@ -186,7 +174,7 @@ export function NewTerminalModal() {
     if (!context?.projectId) return
     const finalName = selectedAgent.label
     const finalCwd = cwd.trim() || inheritedCwd
-    const flag = UNRESTRICTED_FLAG[type]
+    const flag = resolveUnrestrictedFlag(type)
     const extraArgs = unrestricted[type] && flag ? [flag] : undefined
     const trimmedGoal = goal.trim()
     const creation = {
@@ -424,7 +412,7 @@ export function NewTerminalModal() {
             <span className={styles.advancedHint}>{t('term.advancedHint')}</span>
           </summary>
           <div className={styles.advancedBody}>
-            {UNRESTRICTED_FLAG[type] ? (
+            {resolveUnrestrictedFlag(type) ? (
               <>
                 <button
                   type="button"
@@ -506,7 +494,7 @@ export function NewTerminalModal() {
               </>
             ) : null}
 
-            {type !== 'shell' ? (
+            {!isShellAgentType(type) ? (
               <div className={controls.field}>
                 <span className={controls.label}>{t('term.runtimeProfile')}</span>
                 <div className={controls.pillRow}>

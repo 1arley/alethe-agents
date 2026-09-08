@@ -34,10 +34,22 @@ vi.mock('../tauri', () => ({
   pluginInvoke: (command: string, args?: Record<string, unknown>) => invokeMock(command, args),
 }))
 
-const { getPluginEntries, initPluginHost, resetPluginHostForTests, setPluginEnabled } =
-  await import('./host')
+const {
+  activateForView,
+  ensureActivated,
+  getPluginEntries,
+  initPluginHost,
+  resetPluginHostForTests,
+  runCommand,
+  setPluginEnabled,
+} = await import('./host')
 const { commandContributions, paneContributions, sidebarTabContributions, themeContributions } =
   await import('./registry')
+const { agentProviderContributions } = await import('../agentProviders')
+
+function Dummy() {
+  return null
+}
 
 function manifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
   return {
@@ -51,6 +63,21 @@ function manifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
     spec: {},
     ...overrides,
   }
+}
+
+/** A manifest that declares one view and one command, with the capabilities for both. */
+function declaringManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
+  return manifest({
+    capabilities: ['ui.sidebarTab', 'ui.command'],
+    activation: ['onView:test.view', 'onCommand:test.cmd'],
+    contributes: {
+      views: [
+        { id: 'test.view', container: 'rightSidebar', title: 'Test View', icon: 'puzzle' },
+      ],
+      commands: [{ id: 'test.cmd', title: 'Test Command' }],
+    },
+    ...overrides,
+  })
 }
 
 const theme: ThemeContribution = {
@@ -76,32 +103,126 @@ afterEach(async () => {
   await resetPluginHostForTests()
 })
 
-describe('initPluginHost', () => {
-  it('activates enabled bundled plugins and applies their contributions', async () => {
-    const activate = vi.fn((ctx: PluginContext) => {
-      ctx.contributes.theme(theme)
-    })
-    bundled.push({
-      manifest: manifest({ capabilities: ['ui.theme'] }),
-      load: async () => ({ activate }),
-    })
-
-    await initPluginHost()
-
-    expect(activate).toHaveBeenCalledTimes(1)
-    expect(entryFor('test.plugin')).toMatchObject({ active: true, enabled: true, error: null })
-    expect(themeContributions.get('test-theme')).toBeDefined()
-  })
-
-  it('does not load a disabled plugin', async () => {
+describe('declared contributions', () => {
+  it('registers manifest views and commands without loading the plugin', async () => {
     const load = vi.fn(async () => ({ activate: vi.fn() }))
-    bundled.push({ manifest: manifest(), load })
-    disabledIds.push('test.plugin')
+    bundled.push({ manifest: declaringManifest(), load })
 
     await initPluginHost()
 
     expect(load).not.toHaveBeenCalled()
-    expect(entryFor('test.plugin')).toMatchObject({ active: false, enabled: false })
+    expect(entryFor('test.plugin')).toMatchObject({ active: false, enabled: true, error: null })
+
+    const view = sidebarTabContributions.get('test.view')
+    expect(view).toMatchObject({ pluginId: 'test.plugin', side: 'right', label: 'Test View' })
+    expect(view?.component).toBeNull()
+    expect(commandContributions.get('test.cmd')?.label).toBe('Test Command')
+  })
+
+  it('activates on demand when the view is revealed and fills the implementation in', async () => {
+    bundled.push({
+      manifest: declaringManifest(),
+      load: async () => ({
+        activate: (ctx: PluginContext) => ctx.registerView('test.view', Dummy),
+      }),
+    })
+
+    await initPluginHost()
+    expect(sidebarTabContributions.get('test.view')?.component).toBeNull()
+
+    await activateForView('test.view')
+
+    expect(entryFor('test.plugin')?.active).toBe(true)
+    expect(sidebarTabContributions.get('test.view')?.component).toBe(Dummy)
+  })
+
+  it('activates on demand when a command runs, then runs the handler', async () => {
+    const handler = vi.fn()
+    bundled.push({
+      manifest: declaringManifest(),
+      load: async () => ({
+        activate: (ctx: PluginContext) => ctx.registerCommand('test.cmd', handler),
+      }),
+    })
+
+    await initPluginHost()
+    expect(handler).not.toHaveBeenCalled()
+
+    await commandContributions.get('test.cmd')!.run()
+
+    expect(entryFor('test.plugin')?.active).toBe(true)
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('coalesces concurrent activation into a single load', async () => {
+    const load = vi.fn(async () => ({ activate: vi.fn() }))
+    bundled.push({ manifest: declaringManifest(), load })
+
+    await initPluginHost()
+    await Promise.all([
+      ensureActivated('test.plugin'),
+      ensureActivated('test.plugin'),
+      activateForView('test.view'),
+      runCommand('test.cmd'),
+    ])
+
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('activates at startup when the manifest asks for it', async () => {
+    const load = vi.fn(async () => ({ activate: vi.fn() }))
+    bundled.push({ manifest: manifest({ activation: ['onStartupFinished'] }), load })
+
+    await initPluginHost()
+
+    expect(load).toHaveBeenCalledTimes(1)
+    expect(entryFor('test.plugin')?.active).toBe(true)
+  })
+
+  it('treats an empty activation list as startup activation', async () => {
+    const load = vi.fn(async () => ({ activate: vi.fn() }))
+    bundled.push({ manifest: manifest(), load })
+
+    await initPluginHost()
+
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('manifest validation', () => {
+  it('refuses declared views without the matching capability', async () => {
+    bundled.push({
+      manifest: declaringManifest({ capabilities: ['ui.command'] }),
+      load: async () => ({ activate: vi.fn() }),
+    })
+
+    await initPluginHost()
+
+    expect(entryFor('test.plugin')?.error).toBe('capability_denied:test.plugin:ui.sidebarTab')
+    expect(sidebarTabContributions.get('test.view')).toBeUndefined()
+    expect(commandContributions.get('test.cmd')).toBeUndefined()
+  })
+
+  it('refuses an activation event pointing at nothing', async () => {
+    bundled.push({
+      manifest: declaringManifest({ activation: ['onView:missing'] }),
+      load: async () => ({ activate: vi.fn() }),
+    })
+
+    await initPluginHost()
+
+    expect(entryFor('test.plugin')?.error).toBe('unknown_activation_target:onView:missing')
+  })
+
+  it('refuses an activation event it does not understand', async () => {
+    bundled.push({
+      manifest: declaringManifest({ activation: ['*'] }),
+      load: async () => ({ activate: vi.fn() }),
+    })
+
+    await initPluginHost()
+
+    expect(entryFor('test.plugin')?.error).toBe('unknown_activation_event:*')
   })
 
   it('refuses a manifest built for another api version', async () => {
@@ -125,6 +246,74 @@ describe('initPluginHost', () => {
     expect(entryFor('test.plugin')?.error).toBe('invalid_capability:*')
   })
 
+  it('refuses to implement a view the manifest never declared', async () => {
+    bundled.push({
+      manifest: declaringManifest(),
+      load: async () => ({
+        activate: (ctx: PluginContext) => ctx.registerView('not.declared', Dummy),
+      }),
+    })
+
+    await initPluginHost()
+    await activateForView('test.view')
+
+    expect(entryFor('test.plugin')?.error).toBe('undeclared_view:test.plugin:not.declared')
+    expect(sidebarTabContributions.get('test.view')?.component).toBeNull()
+  })
+})
+
+describe('imperative contributions', () => {
+  it('registers themes and panes when the manifest allows it', async () => {
+    bundled.push({
+      manifest: manifest({ capabilities: ['ui.theme', 'ui.pane'] }),
+      load: async () => ({
+        activate: (ctx: PluginContext) => {
+          ctx.contributes.theme(theme)
+          ctx.contributes.pane({ id: 'test-pane', component: Dummy })
+        },
+      }),
+    })
+
+    await initPluginHost()
+
+    expect(entryFor('test.plugin')?.error).toBeNull()
+    expect(themeContributions.get('test-theme')).toBeDefined()
+    expect(paneContributions.get('test-pane')).toBeDefined()
+  })
+
+  it('registers an agent provider when the manifest allows it', async () => {
+    bundled.push({
+      manifest: manifest({ capabilities: ['agent.provider'] }),
+      load: async () => ({
+        activate: (ctx: PluginContext) =>
+          ctx.contributes.agentProvider({ id: 'cursor', label: 'Cursor CLI', cliCommand: 'cursor' }),
+      }),
+    })
+
+    await initPluginHost()
+
+    expect(entryFor('test.plugin')?.error).toBeNull()
+    expect(agentProviderContributions.get('cursor')?.cliCommand).toBe('cursor')
+
+    await setPluginEnabled('test.plugin', false)
+    expect(agentProviderContributions.get('cursor')).toBeUndefined()
+  })
+
+  it('denies an agent provider the manifest did not ask for', async () => {
+    bundled.push({
+      manifest: manifest({ capabilities: ['ui.theme'] }),
+      load: async () => ({
+        activate: (ctx: PluginContext) =>
+          ctx.contributes.agentProvider({ id: 'cursor', label: 'Cursor CLI' }),
+      }),
+    })
+
+    await initPluginHost()
+
+    expect(entryFor('test.plugin')?.error).toBe('capability_denied:test.plugin:agent.provider')
+    expect(agentProviderContributions.get('cursor')).toBeUndefined()
+  })
+
   it('records an activation failure and leaves no partial contribution behind', async () => {
     bundled.push({
       manifest: manifest({ capabilities: ['ui.theme'] }),
@@ -146,9 +335,7 @@ describe('initPluginHost', () => {
     bundled.push({
       manifest: manifest({ capabilities: [] }),
       load: async () => ({
-        activate: (ctx: PluginContext) => {
-          ctx.contributes.theme(theme)
-        },
+        activate: (ctx: PluginContext) => ctx.contributes.theme(theme),
       }),
     })
 
@@ -156,128 +343,6 @@ describe('initPluginHost', () => {
 
     expect(entryFor('test.plugin')?.error).toBe('capability_denied:test.plugin:ui.theme')
     expect(themeContributions.get('test-theme')).toBeUndefined()
-  })
-})
-
-describe('ui contributions', () => {
-  function Dummy() {
-    return null
-  }
-
-  it('registers panes and sidebar tabs when the manifest allows it', async () => {
-    bundled.push({
-      manifest: manifest({ capabilities: ['ui.pane', 'ui.sidebarTab'] }),
-      load: async () => ({
-        activate: (ctx: PluginContext) => {
-          ctx.contributes.pane({ id: 'test-pane', component: Dummy })
-          ctx.contributes.sidebarTab({
-            id: 'test-tab',
-            side: 'right',
-            icon: Dummy,
-            label: 'Test',
-            component: Dummy,
-          })
-        },
-      }),
-    })
-
-    await initPluginHost()
-
-    expect(entryFor('test.plugin')?.error).toBeNull()
-    expect(paneContributions.get('test-pane')).toBeDefined()
-    expect(sidebarTabContributions.get('test-tab')?.side).toBe('right')
-  })
-
-  it('registers a command and runs it', async () => {
-    const run = vi.fn()
-    bundled.push({
-      manifest: manifest({ capabilities: ['ui.command'] }),
-      load: async () => ({
-        activate: (ctx: PluginContext) => {
-          ctx.contributes.command({ id: 'test.cmd', label: 'Test Command', run })
-        },
-      }),
-    })
-
-    await initPluginHost()
-
-    const command = commandContributions.get('test.cmd')
-    expect(command?.label).toBe('Test Command')
-    command?.run()
-    expect(run).toHaveBeenCalledTimes(1)
-  })
-
-  it('denies a command the manifest did not ask for', async () => {
-    bundled.push({
-      manifest: manifest({ capabilities: ['ui.pane'] }),
-      load: async () => ({
-        activate: (ctx: PluginContext) => {
-          ctx.contributes.command({ id: 'test.cmd', label: 'Test', run: vi.fn() })
-        },
-      }),
-    })
-
-    await initPluginHost()
-
-    expect(entryFor('test.plugin')?.error).toBe('capability_denied:test.plugin:ui.command')
-    expect(commandContributions.get('test.cmd')).toBeUndefined()
-  })
-
-  it('denies a pane when only the theme capability is declared', async () => {
-    bundled.push({
-      manifest: manifest({ capabilities: ['ui.theme'] }),
-      load: async () => ({
-        activate: (ctx: PluginContext) => {
-          ctx.contributes.pane({ id: 'test-pane', component: Dummy })
-        },
-      }),
-    })
-
-    await initPluginHost()
-
-    expect(entryFor('test.plugin')?.error).toBe('capability_denied:test.plugin:ui.pane')
-    expect(paneContributions.get('test-pane')).toBeUndefined()
-  })
-
-  it('drops both contributions when the plugin is disabled', async () => {
-    bundled.push({
-      manifest: manifest({ capabilities: ['ui.pane', 'ui.sidebarTab'] }),
-      load: async () => ({
-        activate: (ctx: PluginContext) => {
-          ctx.contributes.pane({ id: 'test-pane', component: Dummy })
-          ctx.contributes.sidebarTab({
-            id: 'test-tab',
-            side: 'left',
-            icon: Dummy,
-            label: 'Test',
-            component: Dummy,
-          })
-        },
-      }),
-    })
-
-    await initPluginHost()
-    await setPluginEnabled('test.plugin', false)
-
-    expect(paneContributions.get('test-pane')).toBeUndefined()
-    expect(sidebarTabContributions.get('test-tab')).toBeUndefined()
-  })
-
-  it('drops a command when the plugin is disabled', async () => {
-    bundled.push({
-      manifest: manifest({ capabilities: ['ui.command'] }),
-      load: async () => ({
-        activate: (ctx: PluginContext) => {
-          ctx.contributes.command({ id: 'test.cmd', label: 'Test', run: vi.fn() })
-        },
-      }),
-    })
-
-    await initPluginHost()
-    expect(commandContributions.get('test.cmd')).toBeDefined()
-
-    await setPluginEnabled('test.plugin', false)
-    expect(commandContributions.get('test.cmd')).toBeUndefined()
   })
 })
 
@@ -327,13 +392,14 @@ describe('plugin context', () => {
 })
 
 describe('setPluginEnabled', () => {
-  it('tears contributions down on disable and brings them back on enable', async () => {
+  it('drops declared contributions on disable and brings them back on enable', async () => {
     const deactivate = vi.fn()
     bundled.push({
-      manifest: manifest({ capabilities: ['ui.theme'] }),
+      manifest: declaringManifest(),
       load: async () => ({
         activate: (ctx: PluginContext) => {
-          ctx.contributes.theme(theme)
+          ctx.registerView('test.view', Dummy)
+          ctx.registerCommand('test.cmd', vi.fn())
           ctx.registerMessages('en', { title: 'Hello' })
         },
         deactivate,
@@ -341,19 +407,41 @@ describe('setPluginEnabled', () => {
     })
 
     await initPluginHost()
-    expect(themeContributions.get('test-theme')).toBeDefined()
+    await activateForView('test.view')
+    expect(sidebarTabContributions.get('test.view')?.component).toBe(Dummy)
 
     await setPluginEnabled('test.plugin', false)
     expect(setEnabledMock).toHaveBeenCalledWith('test.plugin', false)
     expect(deactivate).toHaveBeenCalledTimes(1)
-    expect(themeContributions.get('test-theme')).toBeUndefined()
+    expect(sidebarTabContributions.get('test.view')).toBeUndefined()
+    expect(commandContributions.get('test.cmd')).toBeUndefined()
     expect(registeredMessages['plugin.test.plugin.title']).toBeUndefined()
-    expect(entryFor('test.plugin')).toMatchObject({ enabled: false, active: false })
+
+    await setPluginEnabled('test.plugin', true)
+    // The declaration is back; the implementation waits for the next reveal.
+    expect(sidebarTabContributions.get('test.view')).toBeDefined()
+    expect(entryFor('test.plugin')).toMatchObject({ enabled: true, active: false })
+
+    await activateForView('test.view')
+    expect(sidebarTabContributions.get('test.view')?.component).toBe(Dummy)
+  })
+
+  it('tears an imperative contribution down on disable', async () => {
+    bundled.push({
+      manifest: manifest({ capabilities: ['ui.theme'] }),
+      load: async () => ({
+        activate: (ctx: PluginContext) => ctx.contributes.theme(theme),
+      }),
+    })
+
+    await initPluginHost()
+    expect(themeContributions.get('test-theme')).toBeDefined()
+
+    await setPluginEnabled('test.plugin', false)
+    expect(themeContributions.get('test-theme')).toBeUndefined()
 
     await setPluginEnabled('test.plugin', true)
     expect(themeContributions.get('test-theme')).toBeDefined()
-    expect(registeredMessages['plugin.test.plugin.title']).toBe('Hello')
-    expect(entryFor('test.plugin')).toMatchObject({ enabled: true, active: true })
   })
 
   it('rolls the flag back when persistence fails', async () => {
@@ -365,5 +453,17 @@ describe('setPluginEnabled', () => {
 
     expect(entryFor('test.plugin')).toMatchObject({ enabled: true, active: true })
     expect(entryFor('test.plugin')?.error).toBe('disk_full')
+  })
+
+  it('never loads a plugin disabled before startup', async () => {
+    const load = vi.fn(async () => ({ activate: vi.fn() }))
+    bundled.push({ manifest: declaringManifest(), load })
+    disabledIds.push('test.plugin')
+
+    await initPluginHost()
+
+    expect(load).not.toHaveBeenCalled()
+    expect(sidebarTabContributions.get('test.view')).toBeUndefined()
+    expect(entryFor('test.plugin')).toMatchObject({ active: false, enabled: false })
   })
 })

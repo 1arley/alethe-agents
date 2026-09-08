@@ -2,6 +2,32 @@ import { invoke } from '@tauri-apps/api/core'
 
 export type PluginKind = 'agentType' | 'skill' | 'validationPipeline' | 'ui' | 'theme'
 
+export type ViewContainer = 'leftSidebar' | 'rightSidebar'
+
+/** A view announced by the manifest, so the shell can draw its tab unloaded. */
+export type ManifestView = {
+  id: string
+  container: ViewContainer
+  title: string
+  titleKey?: string | null
+  panelTitleKey?: string | null
+  icon?: string | null
+  order?: number | null
+}
+
+export type ManifestCommand = {
+  id: string
+  title: string
+  titleKey?: string | null
+  icon?: string | null
+  keywords?: string | null
+}
+
+export type ManifestContributes = {
+  views?: ManifestView[]
+  commands?: ManifestCommand[]
+}
+
 export type PluginManifest = {
   id: string
   name: string
@@ -13,6 +39,9 @@ export type PluginManifest = {
   entry?: string | null
   styles?: string | null
   capabilities: string[]
+  /** Activation events. Empty means `onStartupFinished`. */
+  activation?: string[]
+  contributes?: ManifestContributes
   spec: Record<string, unknown>
 }
 
@@ -38,6 +67,11 @@ export async function pluginInstall(manifest: PluginManifest): Promise<void> {
   await invoke('plugin_install', { manifest })
 }
 
+/** Copies a plugin directory the user picked. The plugin arrives disabled. */
+export async function pluginImportDir(source: string): Promise<PluginManifest> {
+  return invoke<PluginManifest>('plugin_import_dir', { source })
+}
+
 export async function pluginUninstall(id: string): Promise<void> {
   await invoke('plugin_uninstall', { id })
 }
@@ -55,4 +89,12 @@ export async function pluginInvoke<T>(
   args?: Record<string, unknown>,
 ): Promise<T> {
   return invoke<T>(command, args)
+}
+
+export async function pluginStorageRead(id: string): Promise<string | null> {
+  return invoke<string | null>('plugin_storage_read', { id })
+}
+
+export async function pluginStorageWrite(id: string, body: string | null): Promise<void> {
+  await invoke('plugin_storage_write', { id, body })
 }

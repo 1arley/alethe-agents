@@ -1,14 +1,26 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { Github } from 'lucide-react'
+import { Github, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { latestVersionFor } from '../../lib/agentVersions'
+import { applyCloudPayload, buildCloudPayload } from '../../lib/cloudSync'
 import { FEATURES } from '../../lib/features'
 import { LOCALES, useT } from '../../lib/i18n'
 import { DEFAULT_PROFILE_IMAGE_URL, getProfileInitial } from '../../lib/profile'
-import { agentCliVersion, findCliLauncher } from '../../lib/tauri'
+import {
+  agentCliVersion,
+  cloudSyncDeviceFinish,
+  cloudSyncDeviceStart,
+  cloudSyncPull,
+  cloudSyncPush,
+  cloudSyncStatus,
+  findCliLauncher,
+  openInBrowser,
+  type CloudDeviceStart,
+} from '../../lib/tauri'
 import { getThemeIcon } from '../../lib/themeIcons'
-import { agentCliCommand, type AgentType } from '../../lib/types'
+import { resolveAgentCliCommand } from '../../lib/agentProviders'
+import type { AgentType } from '../../lib/types'
 import { useProjectsStore } from '../../stores/projectsStore'
 import { useUiStore } from '../../stores/uiStore'
 import { ImageInput } from './ImageInput'
@@ -66,6 +78,11 @@ export function OnboardingModal() {
   const [showGithub, setShowGithub] = useState(false)
   const [githubHandle, setGithubHandle] = useState('')
   const [imgFailed, setImgFailed] = useState(false)
+  const [cloudConfigured, setCloudConfigured] = useState(false)
+  const [cloudLogin, setCloudLogin] = useState<string | null>(null)
+  const [cloudDevice, setCloudDevice] = useState<CloudDeviceStart | null>(null)
+  const [cloudBusy, setCloudBusy] = useState(false)
+  const [cloudFailed, setCloudFailed] = useState(false)
   const [agentAvailability, setAgentAvailability] = useState<Partial<Record<CodingAgent, boolean>>>(
     {},
   )
@@ -96,7 +113,7 @@ export function OnboardingModal() {
     setDetectingAgents(true)
     const detected = await Promise.all(
       AGENTS.map(async (agent) => {
-        const command = agentCliCommand(agent.id)
+        const command = resolveAgentCliCommand(agent.id)
         if (!command) return [agent.id, null] as const
         try {
           const found = await withTimeout(findCliLauncher(command), CLI_DETECTION_TIMEOUT_MS, null)
@@ -128,7 +145,7 @@ export function OnboardingModal() {
     const installed = AGENTS.filter((agent) => availability[agent.id])
     await Promise.all(
       installed.map(async (agent) => {
-        const command = agentCliCommand(agent.id)
+        const command = resolveAgentCliCommand(agent.id)
         if (!command) return
         const version = await withTimeout(
           agentCliVersion(command),
@@ -151,6 +168,12 @@ export function OnboardingModal() {
     if (preferences.onboardingDone || agentDetectionStartedRef.current) return
     agentDetectionStartedRef.current = true
     void detectAgents()
+    cloudSyncStatus()
+      .then((status) => {
+        setCloudConfigured(status.configured)
+        if (status.connected) setCloudLogin(status.login)
+      })
+      .catch(() => setCloudConfigured(false))
   }, [detectAgents, preferences.onboardingDone])
 
   useEffect(() => {
@@ -171,6 +194,50 @@ export function OnboardingModal() {
       profileImageUrl: trimmedPhotoUrl,
     })
     useUiStore.getState().setActiveView('home')
+    if (cloudLogin) {
+      void buildCloudPayload(useProjectsStore.getState().preferences)
+        .then((payload) => cloudSyncPush(payload))
+        .catch(() => undefined)
+    }
+  }
+
+  const signInWithGithub = async () => {
+    setCloudBusy(true)
+    setCloudFailed(false)
+    try {
+      const start = await cloudSyncDeviceStart()
+      setCloudDevice(start)
+      void openInBrowser(start.verification_uri)
+      const status = await cloudSyncDeviceFinish(start)
+      setCloudLogin(status.login)
+      if (status.avatar_url) {
+        setPhotoUrl(status.avatar_url)
+        setImgFailed(false)
+      }
+      let finalName = name.trim() || status.name || status.login || ''
+      setName(finalName)
+      try {
+        const payload = await cloudSyncPull()
+        await applyCloudPayload(payload, setPreferences)
+        const restored = useProjectsStore.getState().preferences
+        if (restored.displayName) {
+          finalName = restored.displayName
+          setName(finalName)
+        }
+        if (restored.profileImageUrl) {
+          setPhotoUrl(restored.profileImageUrl)
+          setImgFailed(false)
+        }
+      } catch {
+        // First device — nothing stored remotely yet.
+      }
+      if (finalName) setStep((value) => Math.max(value, 1))
+    } catch {
+      setCloudFailed(true)
+    } finally {
+      setCloudDevice(null)
+      setCloudBusy(false)
+    }
   }
 
   const next = () => {
@@ -290,13 +357,42 @@ export function OnboardingModal() {
                   </div>
                 ) : null}
 
-                <div className={styles.divider}>
-                  <i />
-                  {t('onboarding.orImportFrom')}
-                  <i />
-                </div>
+                {cloudLogin ? null : (
+                  <div className={styles.divider}>
+                    <i />
+                    {t('onboarding.orImportFrom')}
+                    <i />
+                  </div>
+                )}
 
-                {showGithub ? (
+                {cloudConfigured ? (
+                  cloudLogin ? null : cloudDevice ? (
+                    <div className={styles.deviceFlow}>
+                      <p className={styles.deviceHint}>{t('sync.cloud.codeHint')}</p>
+                      <span className={styles.deviceCode}>{cloudDevice.user_code}</span>
+                      <button
+                        type="button"
+                        className={styles.deviceLink}
+                        onClick={() => void openInBrowser(cloudDevice.verification_uri)}
+                      >
+                        {t('sync.cloud.openGithub')}
+                      </button>
+                      <p className={styles.deviceHint}>{t('sync.cloud.waiting')}</p>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.oauth}
+                      disabled={cloudBusy}
+                      onClick={() => void signInWithGithub()}
+                    >
+                      {cloudBusy ? <Loader2 size={16} className={styles.spin} /> : (
+                        <Github size={16} />
+                      )}
+                      {t('onboarding.githubSignIn')}
+                    </button>
+                  )
+                ) : showGithub ? (
                   <div className={styles.githubRow}>
                     <input
                       className={styles.githubInput}
@@ -328,8 +424,17 @@ export function OnboardingModal() {
                     {t('onboarding.githubImport')}
                   </button>
                 )}
+                {cloudFailed ? (
+                  <p className={styles.note}>{t('onboarding.githubFailed')}</p>
+                ) : null}
 
-                <p className={styles.note}>{t('onboarding.localNote')}</p>
+                {cloudLogin ? (
+                  <p className={styles.note}>
+                    {t('onboarding.githubSignedIn', { login: cloudLogin })}
+                  </p>
+                ) : (
+                  <p className={styles.note}>{t('onboarding.localNote')}</p>
+                )}
               </div>
             ) : null}
 

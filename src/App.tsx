@@ -7,6 +7,7 @@ import { Group as PanelGroup, Panel, Separator, usePanelRef } from 'react-resiza
 import styles from './App.module.css'
 import homeBackground from './assets/home-bg-right.png'
 import { AgentSandbox } from './components/AgentSandbox'
+import { ContributedModals } from './components/ContributedModals'
 import { DictationButton } from './components/DictationButton'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { FocusOverlay } from './components/FocusOverlay'
@@ -37,7 +38,6 @@ import { RemoteControlModal } from './components/modals/RemoteControlModal'
 import { SuspendGroupModal } from './components/modals/SuspendGroupModal'
 import { SyncModal } from './components/modals/SyncModal'
 import { ThemePickerModal } from './components/modals/ThemePickerModal'
-import { TodoSettingsModal } from './components/modals/TodoSettingsModal'
 import { TopbarSettingsModal } from './components/modals/TopbarSettingsModal'
 import { UpdateModal } from './components/modals/UpdateModal'
 import { WelcomeModal } from './components/modals/WelcomeModal'
@@ -59,6 +59,7 @@ import { useRemoteControlService } from './hooks/useRemoteControlService'
 import { useResourceSupervisor } from './hooks/useResourceSupervisor'
 import { useRouter9AutoStart } from './hooks/useRouter9AutoStart'
 import { startActivityTracker } from './lib/activityTracker'
+import { agentAccentVar } from './lib/agentProviders'
 import { APP_SHELL_ID } from './lib/appShell'
 import { AGENT_SANDBOX_ENABLED } from './lib/featureFlags'
 import { intlLocale, translate, useT } from './lib/i18n'
@@ -66,7 +67,8 @@ import { visibilityFromPanelResize, widthFromPanelResize } from './lib/sidebarPa
 import { setMaxConcurrentSpawns } from './lib/spawnQueue'
 import { ghosttyKillAll, setWindowOpacity } from './lib/tauri'
 import { getLastCrashReport } from './lib/tauri'
-import { applyLegacyPluginMigrations, useSidebarTabs } from './lib/plugins'
+import { applyLegacyPluginMigrations } from './lib/plugins'
+import { useSidebarViews } from './lib/viewPlacement'
 import { useAppliedTheme } from './lib/themes'
 import { loadThemeIconBytes } from './lib/themeIcons'
 import { checkForUpdate } from './lib/updater'
@@ -153,7 +155,7 @@ function ToastItem({ toast }: { toast: InAppToast }) {
   }, [dismissToast, toast.id, toast.actions])
 
   const accentStyle = {
-    '--toast-accent': toast.agent ? `var(--agent-${toast.agent})` : 'var(--accent)',
+    '--toast-accent': toast.agent ? agentAccentVar(toast.agent) : 'var(--accent)',
   } as CSSProperties
 
   return (
@@ -238,11 +240,11 @@ export default function App() {
   const rightSidebarVisible = useProjectsStore((s) => s.preferences.rightSidebarVisible)
   const leftSidebarWidth = useProjectsStore((s) => s.preferences.leftSidebarWidth)
   const rightSidebarWidth = useProjectsStore((s) => s.preferences.rightSidebarWidth)
-  const todosEnabled = useProjectsStore((s) => s.preferences.enabledFeatures.todos)
+
   const playwrightEnabled = useProjectsStore((s) => s.preferences.enabledFeatures.playwright)
   const mcpEnabled = useProjectsStore((s) => s.preferences.enabledFeatures.mcp)
-  const rightSidebarTabs = useSidebarTabs('right')
-  const rightPanelEnabled = todosEnabled || mcpEnabled || rightSidebarTabs.length > 0
+  const rightSidebarTabs = useSidebarViews('right')
+  const rightPanelEnabled = mcpEnabled || rightSidebarTabs.length > 0
   const setPreferences = useProjectsStore((s) => s.setPreferences)
   // Keep panel defaults stable while dragging. Updating defaultSize on every
   // resize event can make react-resizable-panels rebuild the layout mid-drag.
@@ -733,7 +735,6 @@ export default function App() {
           </Suspense>
         ) : null}
         <ThemePickerModal />
-        <TodoSettingsModal />
         <TopbarSettingsModal />
         <AiUsageModal />
         <UpdateModal />
@@ -741,6 +742,7 @@ export default function App() {
         <RecentChatsModal />
         <HandoffModal />
         <McpManagerModal />
+        <ContributedModals />
         <McpIntroModal />
         <RemoteControlModal />
         <AuditModal />

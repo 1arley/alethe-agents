@@ -2,6 +2,7 @@ import type { PluginModule } from '../lib/plugins/types'
 import type { PluginManifest } from '../lib/tauri'
 import { GIT_CONTROL_MANIFEST } from './git-control/manifest'
 import { THEME_PACK_MANIFEST } from './theme-pack/manifest'
+import { TODOS_MANIFEST } from './todos/manifest'
 
 export type BundledPlugin = {
   manifest: PluginManifest
@@ -22,5 +23,9 @@ export const BUNDLED_PLUGINS: readonly BundledPlugin[] = [
   {
     manifest: GIT_CONTROL_MANIFEST,
     load: () => import('./git-control/main').then((module) => module.default),
+  },
+  {
+    manifest: TODOS_MANIFEST,
+    load: () => import('./todos/main').then((module) => module.default),
   },
 ]

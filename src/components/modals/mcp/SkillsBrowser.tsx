@@ -12,7 +12,7 @@ import {
   type SkillNode,
   type SkillSummary,
 } from '../../../lib/tauri'
-import { AGENT_TYPE_LABELS, type AgentType } from '../../../lib/types'
+import { agentLabel as agentTypeLabel } from '../../../lib/agentProviders'
 import { useUiStore } from '../../../stores/uiStore'
 import { EmptyState } from '../../EmptyState'
 import { MarkdownRenderer } from '../../MarkdownPane/MarkdownRenderer'
@@ -26,7 +26,7 @@ export function SkillsBrowser({ dark }: { dark: boolean }) {
   const t = useT()
   const pushToast = useUiStore((state) => state.pushToast)
   const agentLabel = (agent: string) =>
-    agent === 'shared' ? t('skills.sharedStore') : (AGENT_TYPE_LABELS[agent as AgentType] ?? agent)
+    agent === 'shared' ? t('skills.sharedStore') : agentTypeLabel(agent)
 
   const [snapshots, setSnapshots] = useState<SkillAgentSnapshot[] | null>(null)
   const [selected, setSelected] = useState<string | null>(null)

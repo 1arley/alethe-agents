@@ -10,7 +10,8 @@ import {
   spawnPty,
   writePty,
 } from '../lib/tauri'
-import { agentCliCommand, type AgentType } from '../lib/types'
+import { resolveAgentCliCommand } from '../lib/agentProviders'
+import type { AgentType } from '../lib/types'
 
 export type AgentInstallStatus = 'idle' | 'running' | 'success' | 'failed'
 
@@ -105,7 +106,7 @@ export function useAgentInstall(agent: AgentType, lockKey: string = agent) {
       setStatus('running')
       setBusyAgent(lockKey)
 
-      const command = method.verifyCommand ?? agentCliCommand(agent)
+      const command = method.verifyCommand ?? resolveAgentCliCommand(agent)
       // Only meaningful for an update of something already on PATH — a fresh install has
       // nothing to compare against, and verifyAbsent (uninstall) checks absence, not a version.
       const beforeVersion = command && !method.verifyAbsent ? await agentCliVersion(command) : null

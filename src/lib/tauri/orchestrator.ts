@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import type { AgentFitness } from '../agentFitness'
 
 export type OrchestratorJobStatus =
   | 'queued'
@@ -56,6 +57,14 @@ export type OrchestratorClaudeQuota = {
   isUsingOverage?: boolean
 }
 
+export type OrchestratorRouting = {
+  /** `ignored` means the planner delegated into the strained side with the reading in hand. */
+  verdict: 'chosen' | 'ignored'
+  agent: string
+  window: string
+  used: number
+}
+
 export type OrchestratorJob = {
   id: string
   /** The terminal whose agent asked for this work; null for calls made outside a terminal. */
@@ -75,6 +84,8 @@ export type OrchestratorJob = {
   tokens: OrchestratorTokens | null
   /** Claude's per-turn usage report; null for Codex workers. */
   quota: OrchestratorClaudeQuota | null
+  /** Why this worker ran on this agent; null when neither side was running out at the time. */
+  routing: OrchestratorRouting | null
   worktree: string | null
   pendingApproval: OrchestratorPendingApproval | null
   hasDiff: boolean
@@ -119,6 +130,11 @@ export async function orchestratorJobs(): Promise<OrchestratorSnapshot> {
 
 export async function orchestratorSetConcurrency(limit: number): Promise<void> {
   return invoke<void>('orchestrator_set_concurrency', { limit })
+}
+
+/** Pushes an agent's remaining-limit snapshot into the orchestrator core, which cannot poll for it. */
+export async function setAgentFitness(agent: string, snapshot: AgentFitness): Promise<void> {
+  return invoke<void>('orchestrator_set_agent_fitness', { agent, snapshot })
 }
 
 /** The unified diff a worker has produced so far — the same text `alethe_diff` hands the planner. */

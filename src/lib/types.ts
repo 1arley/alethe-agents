@@ -1,5 +1,7 @@
-export type AgentType =
+/** Agent providers that ship with the app; their data lives in this file. */
+export type BuiltinAgentType =
   | 'shell'
+  | 'wsl'
   | 'claude'
   | 'codex'
   | 'copilot'
@@ -9,7 +11,15 @@ export type AgentType =
   | 'antigravity'
   | 'kiro'
 
-export const AGENT_TYPE_LABELS: Record<AgentType, string> = {
+/**
+ * An agent type id. Open on purpose: plugins contribute agent providers at
+ * runtime, so an unknown string here is a contributed provider, not a bug. Use
+ * `isBuiltinAgentType` or the resolvers in `agentProviders.ts` before assuming
+ * an id resolves.
+ */
+export type AgentType = BuiltinAgentType | (string & {})
+
+export const AGENT_TYPE_LABELS: Record<BuiltinAgentType, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   copilot: 'GitHub Copilot',
@@ -19,9 +29,10 @@ export const AGENT_TYPE_LABELS: Record<AgentType, string> = {
   freebuff: 'Freebuff',
   kiro: 'Kiro CLI',
   shell: 'Shell',
+  wsl: 'WSL',
 }
 
-export const ALL_AGENT_TYPES: AgentType[] = [
+export const ALL_AGENT_TYPES: BuiltinAgentType[] = [
   'claude',
   'codex',
   'copilot',
@@ -31,19 +42,28 @@ export const ALL_AGENT_TYPES: AgentType[] = [
   'freebuff',
   'kiro',
   'shell',
+  'wsl',
 ]
 
-/** Backends report the agent as a free-form string; anything unknown stays unidentified. */
-export function parseAgentType(value: string | null | undefined): AgentType | null {
-  const key = (value ?? '').trim().toLowerCase()
-  return ALL_AGENT_TYPES.find((type) => type === key) ?? null
+/** Types that open a plain shell — no agent CLI session semantics. */
+export function isShellAgentType(agent: AgentType): boolean {
+  return agent === 'shell' || agent === 'wsl'
 }
 
+/** Built-in CLI binary, when it differs from the agent id. */
+const BUILTIN_CLI_COMMANDS: Partial<Record<BuiltinAgentType, string | null>> = {
+  shell: null,
+  wsl: 'wsl.exe',
+  antigravity: 'agy',
+  kiro: 'kiro-cli',
+}
+
+/** Built-ins only. Use `resolveAgentCliCommand` to also reach contributed providers. */
 export function agentCliCommand(agent: AgentType): string | undefined {
-  if (agent === 'shell') return undefined
-  if (agent === 'antigravity') return 'agy'
-  if (agent === 'kiro') return 'kiro-cli'
-  return agent
+  if (!(agent in AGENT_TYPE_LABELS)) return undefined
+  const mapped = BUILTIN_CLI_COMMANDS[agent as BuiltinAgentType]
+  if (mapped === null) return undefined
+  return mapped ?? agent
 }
 
 export type Locale = 'en' | 'pt-BR'
@@ -110,7 +130,7 @@ export type SetupWalkthroughStep = 'project' | 'appearance'
 export const SETUP_WALKTHROUGH_STEPS: SetupWalkthroughStep[] = ['project', 'appearance']
 
 export type FeatureId =
-  'todos' | 'browser' | 'graphify' | 'aiMemory' | 'mcp' | 'playwright' | 'orchestrator'
+  'browser' | 'graphify' | 'aiMemory' | 'mcp' | 'playwright' | 'orchestrator' | 'gsdSync'
 
 export type TodoItem = {
   id: string
@@ -156,11 +176,10 @@ export type AgentHandoffBootstrap = {
 
 export type AgentRuntimeProfile = 'full' | 'lean' | 'diagnostic'
 
-/** Flag de "modo irrestrito" por agente (skip permissions / approvals). */
-
-/** Flag de "modo irrestrito" por agente (skip permissions / approvals). */
-export const UNRESTRICTED_FLAG: Record<AgentType, string | null> = {
+/** Unrestricted-mode flag per agent (skip permissions / approvals). */
+export const UNRESTRICTED_FLAG: Record<BuiltinAgentType, string | null> = {
   shell: null,
+  wsl: null,
   claude: '--dangerously-skip-permissions',
   codex: '--dangerously-bypass-approvals-and-sandbox',
   copilot: '--allow-all',
@@ -509,7 +528,10 @@ export type Preferences = {
 
   topbarStyle: 'classic' | 'three-areas'
   /** Local do controle Git: sidebar esquerda ou direita. */
-  gitControlPlacement: 'left' | 'right'
+  /** @deprecated Migrated into `viewPlacements.git`. Read only by the migration. */
+  gitControlPlacement?: 'left' | 'right'
+  /** Sidebar a contributed view sits in, overriding the container its manifest declares. */
+  viewPlacements: Record<string, 'left' | 'right'>
 
   /** Credenciais locais do Spotify Developer Dashboard para Now Playing. */
   spotifyClientId: string
@@ -543,7 +565,7 @@ export type Preferences = {
   playwrightBrowserMode: 'shared' | 'dedicated'
   /** Only used when playwrightBrowserMode is 'dedicated'. */
   playwrightDedicatedHeadless: boolean
-  /** Folder configured as the base location for the global Todo list. */
+  /** Legacy: the Todo List plugin owns this now. Read by its migration only. */
   todoStoragePath: string
   /** Scope the MCP panel opens on. */
   mcpDefaultScope: McpScope
@@ -605,6 +627,10 @@ export type ProjectsFile = {
   ungroupedOrder: string[]
   projects: Project[]
 
+  /**
+   * Owned by the Todo List plugin now, and read only by its one-time
+   * migration. Kept persisted so removing the plugin cannot lose the list.
+   */
   todos: TodoItem[]
   activeProjectId: string | null
 
@@ -639,6 +665,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   terminalTheme: null,
   enabledAgents: {
     shell: true,
+    wsl: true,
     claude: true,
     codex: true,
     copilot: true,
@@ -660,7 +687,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   alwaysStartUnrestricted: false,
   lastTerminalCreation: null,
   topbarStyle: 'classic',
-  gitControlPlacement: 'left',
+  viewPlacements: {},
   spotifyClientId: '',
   spotifyClientSecret: '',
   discordRichPresenceEnabled: false,
@@ -678,10 +705,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   remoteAllowShellInput: false,
   remoteUseTailscale: false,
   enabledFeatures: {
-    todos: true,
     browser: true,
     graphify: true,
     aiMemory: false,
+    gsdSync: false,
     mcp: true,
     playwright: false,
     orchestrator: false,
@@ -749,7 +776,7 @@ export const GROUP_COLORS = [
   '#10b981',
 ] as const
 
-export const PROVIDER_MODELS: Record<AgentType, { id: string; label: string }[]> = {
+export const PROVIDER_MODELS: Record<BuiltinAgentType, { id: string; label: string }[]> = {
   claude: [
     { id: 'claude-3-7-sonnet', label: 'Claude 3.7 Sonnet (Padrão)' },
     { id: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet' },
@@ -784,11 +811,12 @@ export const PROVIDER_MODELS: Record<AgentType, { id: string; label: string }[]>
     { id: 'claude-haiku-4.5', label: 'Claude Haiku 4.5' },
   ],
   shell: [{ id: 'default', label: 'Shell Padrão' }],
+  wsl: [{ id: 'default', label: 'WSL' }],
 }
 
 export type McpScope = 'global' | 'project'
 
-export type McpAgent = Extract<AgentType, 'claude' | 'codex' | 'opencode' | 'antigravity'>
+export type McpAgent = Extract<BuiltinAgentType, 'claude' | 'codex' | 'opencode' | 'antigravity'>
 
 export const MCP_AGENTS: McpAgent[] = ['claude', 'codex', 'opencode', 'antigravity']
 

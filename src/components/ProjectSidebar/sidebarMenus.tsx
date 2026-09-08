@@ -29,7 +29,8 @@ import {
   restartPty,
   writeTextFile,
 } from '../../lib/tauri'
-import { agentCliCommand, type Group, type Project, type Terminal } from '../../lib/types'
+import { resolveAgentCliCommand } from '../../lib/agentProviders'
+import type { Group, Project, Terminal } from '../../lib/types'
 import { useProjectsStore } from '../../stores/projectsStore'
 import { useTerminalsStore } from '../../stores/terminalsStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -470,7 +471,7 @@ export function createSidebarMenus(deps: SidebarMenuDeps) {
         id: activeTab.ptyId,
         cols: 80,
         rows: 24,
-        command: agentCliCommand(activeTab.type),
+        command: resolveAgentCliCommand(activeTab.type),
         cwd: activeTab.cwd || undefined,
         extraArgs: launch.args,
         env: runtime.env,
