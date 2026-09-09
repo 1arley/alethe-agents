@@ -8,11 +8,11 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { pickDirectory } from '../../../lib/dialog'
 import { type MessageKey, type TFunction, useT } from '../../../lib/i18n'
 import type { PluginRuntimeEntry } from '../../../lib/plugins'
 import { refreshLocalPlugins, setPluginEnabled, usePlugins } from '../../../lib/plugins'
 import type { PluginKind, PluginManifest } from '../../../lib/tauri'
-import { pickDirectory } from '../../../lib/dialog'
 import {
   openInFileExplorer,
   pluginImportDir,
@@ -23,6 +23,8 @@ import {
 import { useUiStore } from '../../../stores/uiStore'
 import controls from '../controls.module.css'
 import { Modal } from '../Modal'
+import { CapabilityList } from './pluginCapabilities'
+import { PluginCatalog } from './PluginCatalog'
 import styles from './PluginsPage.module.css'
 import { SettingsSection } from './primitives'
 
@@ -34,37 +36,9 @@ const KIND_KEYS: Record<PluginKind, MessageKey> = {
   validationPipeline: 'prefs.pluginsKindValidationPipeline',
 }
 
-const CAPABILITY_KEYS: Record<string, MessageKey> = {
-  'ui.theme': 'prefs.pluginsCapabilityTheme',
-  'ui.pane': 'prefs.pluginsCapabilityPane',
-  'ui.sidebarTab': 'prefs.pluginsCapabilitySidebarTab',
-  'ui.command': 'prefs.pluginsCapabilityCommand',
-  'invoke:git_*': 'prefs.pluginsCapabilityGit',
-  'invoke:worktree_*': 'prefs.pluginsCapabilityWorktree',
-}
-
 function kindLabel(t: TFunction, kind: PluginKind): string {
   const key = KIND_KEYS[kind]
   return key ? t(key) : kind
-}
-
-function CapabilityList({ capabilities }: { capabilities: readonly string[] }) {
-  const t = useT()
-  if (capabilities.length === 0) {
-    return <p className={styles.emptyNote}>{t('prefs.pluginsCapabilitiesNone')}</p>
-  }
-  return (
-    <ul className={styles.capabilityList}>
-      {capabilities.map((capability) => {
-        const key = CAPABILITY_KEYS[capability]
-        return (
-          <li key={capability}>
-            {key ? t(key) : <code className={styles.capabilityRaw}>{capability}</code>}
-          </li>
-        )
-      })}
-    </ul>
-  )
 }
 
 export function PluginsPage() {
@@ -268,6 +242,8 @@ export function PluginsPage() {
           </div>
         )}
       </SettingsSection>
+
+      <PluginCatalog />
 
       <SettingsSection
         id="plugins-install"

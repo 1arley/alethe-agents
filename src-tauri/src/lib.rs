@@ -50,6 +50,7 @@ mod paths;
 mod planning;
 mod planning_gate;
 mod plugin_assets;
+mod plugin_catalog;
 mod plugins;
 mod process_tree;
 mod profiles;
@@ -494,6 +495,8 @@ pub fn run() {
             plugins::plugin_import_dir,
             plugins::plugin_uninstall,
             plugins::plugin_set_enabled,
+            plugin_catalog::plugin_catalog,
+            plugin_catalog::plugin_catalog_open,
             plugins::plugin_storage_read,
             plugins::plugin_storage_write,
             mcp_store::mcp_scan,

@@ -257,6 +257,50 @@ ten seconds, is reported as an activation error and leaves no script or styleshe
 The global is string-keyed because the production bundle is minified with `mangle.toplevel` — a
 plugin cannot import from the host by module name.
 
+## The catalogue
+
+Preferences → Plugins lists plugins published by other people. The index is a single file,
+`plugins.json`, at the root of this repository, read from
+`raw.githubusercontent.com/Kc1t/alethe-agents/main/plugins.json`:
+
+```jsonc
+{
+  "schema": 1,
+  "plugins": [
+    {
+      "id": "acme.panel",
+      "name": "Panel",
+      "description": "…",
+      "author": "acme",
+      "repo": "acme/alethe-panel",
+      "downloadUrl": "https://github.com/acme/alethe-panel/releases/latest",
+      "version": "1.0.0",
+      "minApiVersion": 1,
+      "capabilities": ["ui.sidebarTab"]
+    }
+  ]
+}
+```
+
+**The catalogue downloads nothing and runs nothing.** *Get plugin* opens the author's page in a
+browser; the user fetches the folder and imports it, which is the same reviewed path as before, trust
+dialog included. That is deliberate: auto-installing third-party code is not defensible while the
+capability gate is advisory rather than a sandbox.
+
+A listing is dropped, not shown, when its id is not a plain id, its name is empty, its
+`downloadUrl` is not `https`, or its `minApiVersion` is above this build. `plugin_catalog_open`
+re-checks the URL against the cached catalogue, so a link can never be turned into a general
+opener, and it launches the browser without a shell in the chain. The command is on the
+forbidden list, so no plugin can call it.
+
+The index is cached in `<profile>/plugins/catalog-cache.json` for six hours. When the network
+fails the cache is served and flagged stale — a directory the user cannot reach is more useful
+stale than empty. The fetch happens in Rust, so no CSP change was needed.
+
+Publishing is a pull request adding one entry. The plugin itself lives in its author's repository;
+nothing is hosted here. Keeping the index in the app repository is the simple starting point —
+moving it to its own repository later changes one constant and keeps the URL shape.
+
 ## Where things live
 
 | Path | Role |
@@ -274,6 +318,9 @@ plugin cannot import from the host by module name.
 | `src/components/ContributedView/` | renders a declared view, activating it on reveal |
 | `src/components/modals/preferences/PluginsPage.tsx` | the management UI |
 | `src/components/ContributedModals/` | mounts the contributed modal matching `openModal` |
+| `src-tauri/src/plugin_catalog.rs` | the catalogue index: fetch, cache and validation |
+| `src/components/modals/preferences/PluginCatalog.tsx` | the catalogue UI |
+| `plugins.json` | the published index |
 | `src/plugins/` | bundled plugins |
 
 Enable/disable state lives in `<profile>/plugins/state.json` and covers bundled plugins too, so the

@@ -344,3 +344,18 @@
   cursor: pointer;
   user-select: none;
 }
+
+.catalogHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.catalogStale {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-faint);
+  font-size: 11px;
+}

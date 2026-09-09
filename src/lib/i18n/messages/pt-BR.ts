@@ -749,6 +749,22 @@ export const ptBR: Record<MessageKey, string> = {
   'prefs.pluginsCapabilityCommand': 'Adicionar comandos',
   'prefs.pluginsCapabilityGit': 'Ler e alterar o estado do Git',
   'prefs.pluginsCapabilityWorktree': 'Gerenciar worktrees',
+  'prefs.pluginsCapabilityModal': 'Abrir as prÃ³prias janelas',
+  'prefs.pluginsCapabilityAgentProvider': 'Adicionar um CLI de agente',
+  'prefs.pluginsCatalogTitle': 'Explorar plugins',
+  'prefs.pluginsCatalogDesc':
+    'Plugins publicados por seus autores. A Alethe lista e leva vocÃª atÃ© o download; nada Ã© instalado por vocÃª.',
+  'prefs.pluginsCatalogRefresh': 'Atualizar',
+  'prefs.pluginsCatalogStale': 'Mostrando a Ãºltima lista salva neste computador',
+  'prefs.pluginsCatalogLoading': 'Carregando a lista de pluginsâ¦',
+  'prefs.pluginsCatalogEmpty': 'Nenhum plugin listado ainda.',
+  'prefs.pluginsCatalogError': 'NÃ£o foi possÃ­vel carregar a lista de plugins.',
+  'prefs.pluginsCatalogInstalled': 'Instalado',
+  'prefs.pluginsCatalogBy': 'Por {author}',
+  'prefs.pluginsCatalogGet': 'Obter plugin',
+  'prefs.pluginsCatalogOpenError': 'NÃ£o foi possÃ­vel abrir esse link.',
+  'prefs.pluginsCatalogHint':
+    'Abre a pÃ¡gina do autor no navegador. Baixe a pasta e use Importar plugin acima â ele chega desligado, e ninguÃ©m revisou.',
   'prefs.pluginsUninstall': 'Desinstalar',
   'prefs.pluginsUninstallTitle': 'Desinstalar {name}?',
   'prefs.pluginsUninstallBody':

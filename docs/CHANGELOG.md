@@ -75,6 +75,11 @@ Notable user-facing changes to **Alethe** are documented here. The format is bas
   they were, so nothing is lost if you go back.
 - A todo assigned to a project you later delete now shows up as unassigned instead of disappearing
   from the list while still counting towards the progress bar.
+- **A plugin catalogue in Preferences.** Plugins published by other people are now listed inside
+  Alethe, with what each one is allowed to do spelled out before you decide. *Get plugin* opens the
+  author's page in your browser — Alethe never downloads or installs anything for you, and the
+  plugin still arrives switched off after you import it. The list is kept for six hours and is shown
+  from your last copy when you are offline, marked as such.
 - **Plugins can remember things.** A plugin now has its own storage, so what it holds survives
   closing the app. It is kept apart from the plugin's own files, which means updating a plugin no
   longer risks taking its data with it, and one plugin cannot read another's. Removing a plugin

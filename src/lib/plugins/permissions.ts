@@ -43,6 +43,8 @@ const FORBIDDEN_COMMANDS = new Set([
   // Left invokable, a plugin could read and overwrite another plugin's record.
   'plugin_storage_read',
   'plugin_storage_write',
+  // Opens a browser window; nothing a plugin needs, and a cheap way to nag.
+  'plugin_catalog_open',
   'save_projects',
   'write_text_file',
   'delete_filesystem_entry',

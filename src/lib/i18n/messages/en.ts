@@ -737,6 +737,22 @@ export const en = {
   'prefs.pluginsCapabilityCommand': 'Add commands',
   'prefs.pluginsCapabilityGit': 'Read and write Git state',
   'prefs.pluginsCapabilityWorktree': 'Manage worktrees',
+  'prefs.pluginsCapabilityModal': 'Open its own dialogs',
+  'prefs.pluginsCapabilityAgentProvider': 'Add an agent CLI',
+  'prefs.pluginsCatalogTitle': 'Browse plugins',
+  'prefs.pluginsCatalogDesc':
+    'Plugins published by their authors. Alethe lists them and takes you to the download; nothing is installed for you.',
+  'prefs.pluginsCatalogRefresh': 'Refresh',
+  'prefs.pluginsCatalogStale': 'Showing the last list saved on this computer',
+  'prefs.pluginsCatalogLoading': 'Loading the plugin listâ¦',
+  'prefs.pluginsCatalogEmpty': 'No plugins are listed yet.',
+  'prefs.pluginsCatalogError': 'The plugin list could not be loaded.',
+  'prefs.pluginsCatalogInstalled': 'Installed',
+  'prefs.pluginsCatalogBy': 'By {author}',
+  'prefs.pluginsCatalogGet': 'Get plugin',
+  'prefs.pluginsCatalogOpenError': 'That link could not be opened.',
+  'prefs.pluginsCatalogHint':
+    'Opens the authorâs page in your browser. Download the folder, then use Import plugin above â it arrives switched off, and nobody has reviewed it.',
   'prefs.pluginsUninstall': 'Uninstall',
   'prefs.pluginsUninstallTitle': 'Uninstall {name}?',
   'prefs.pluginsUninstallBody':

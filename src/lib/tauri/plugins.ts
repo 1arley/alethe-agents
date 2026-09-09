@@ -98,3 +98,34 @@ export async function pluginStorageRead(id: string): Promise<string | null> {
 export async function pluginStorageWrite(id: string, body: string | null): Promise<void> {
   await invoke('plugin_storage_write', { id, body })
 }
+
+export type CatalogPlugin = {
+  id: string
+  name: string
+  description: string
+  author: string
+  repo: string
+  downloadUrl: string
+  version: string
+  minApiVersion: number
+  capabilities: string[]
+}
+
+export type CatalogSnapshot = {
+  plugins: CatalogPlugin[]
+  fetchedAt: number
+  /** True when the network failed and this came from disk. */
+  stale: boolean
+}
+
+export async function pluginCatalog(
+  apiVersion: number,
+  refresh = false,
+): Promise<CatalogSnapshot> {
+  return invoke<CatalogSnapshot>('plugin_catalog', { apiVersion, refresh })
+}
+
+/** Opens a catalogue listing in the browser. Refused unless the catalogue offers it. */
+export async function pluginCatalogOpen(apiVersion: number, url: string): Promise<void> {
+  await invoke('plugin_catalog_open', { apiVersion, url })
+}
