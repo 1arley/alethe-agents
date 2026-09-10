@@ -960,6 +960,11 @@
   background: color-mix(in srgb, var(--agent-antigravity) 14%, transparent);
   border-color: color-mix(in srgb, var(--agent-antigravity) 28%, transparent);
 }
+.notifCursor {
+  color: var(--agent-cursor);
+  background: color-mix(in srgb, var(--agent-cursor) 14%, transparent);
+  border-color: color-mix(in srgb, var(--agent-cursor) 28%, transparent);
+}
 .notifShell {
   color: var(--agent-shell);
   background: color-mix(in srgb, var(--agent-shell) 14%, transparent);

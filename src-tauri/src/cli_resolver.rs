@@ -161,7 +161,20 @@ pub fn find_windows_cli_launcher(command: &str) -> Option<PathBuf> {
     Some(resolved)
 }
 
+/// Binary name for an agent whose CLI is not called after the vendor: Antigravity ships `agy`, and
+/// Cursor ships `cursor-agent` (its bare `agent` alias collides with other vendors' CLIs). Callers
+/// normally pass the binary name already, so this only has to catch the ones that pass an agent id.
+fn canonical_cli_name(command: &str) -> &str {
+    match command {
+        "antigravity" => "agy",
+        "cursor" => "cursor-agent",
+        other => other,
+    }
+}
+
 fn resolve_cli_launcher(command: &str) -> Option<PathBuf> {
+    let command = canonical_cli_name(command);
+
     #[cfg(not(windows))]
     {
         if let Ok(path) = which::which(command) {
@@ -197,19 +210,11 @@ fn resolve_cli_launcher(command: &str) -> Option<PathBuf> {
         dirs.extend(split_windows_path_expanded(&rebuilt_path()));
         dirs.extend(agent_search_dirs());
 
-        // exclusivamente `agy`. Nunca use o desktop como fallback para o CLI.
-        let candidates_to_try = match command {
-            "antigravity" | "agy" => vec!["agy"],
-            other => vec![other],
-        };
-
-        for cmd_name in candidates_to_try {
-            for dir in &dirs {
-                for extension in ["cmd", "exe", "bat", "ps1"] {
-                    let candidate = dir.join(format!("{cmd_name}.{extension}"));
-                    if candidate.is_file() {
-                        return Some(candidate);
-                    }
+        for dir in &dirs {
+            for extension in ["cmd", "exe", "bat", "ps1"] {
+                let candidate = dir.join(format!("{command}.{extension}"));
+                if candidate.is_file() {
+                    return Some(candidate);
                 }
             }
         }
@@ -448,6 +453,9 @@ pub fn agent_search_dirs() -> Vec<PathBuf> {
                 .join("antigravity")
                 .join("bin"),
         );
+        // Cursor's installer drops its shims at the root of this folder, not in a `bin` subdir,
+        // and only puts it on PATH for shells started afterwards.
+        dirs.push(profile.join("AppData").join("Local").join("cursor-agent"));
     }
     if let Some(app_data) = env::var_os("APPDATA").map(PathBuf::from) {
         dirs.push(app_data.join("npm"));
@@ -707,6 +715,7 @@ fn discover_provider_models_inner(provider: String) -> Result<Vec<ModelOption>, 
 
     let cmd_name = match provider_lower.as_str() {
         "antigravity" | "agy" => "agy",
+        "cursor" | "cursor-agent" => "cursor-agent",
         other => other,
     };
 
@@ -750,6 +759,27 @@ fn discover_provider_models_inner(provider: String) -> Result<Vec<ModelOption>, 
                     id: "deepseek-r1".into(),
                     label: "DeepSeek R1 (Reasoning)".into(),
                 });
+            }
+        }
+        // `cursor-agent models` lists what the signed-in account can actually reach, which is the
+        // only reliable source: Cursor's line-up changes per plan and over time.
+        "cursor" | "cursor-agent" => {
+            if let Ok(output) = std::process::Command::new(&bin_path).arg("models").output() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    let trimmed = line.trim();
+                    let id = trimmed
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or(trimmed)
+                        .to_string();
+                    if is_valid_model_id(&id) {
+                        models.push(ModelOption {
+                            label: format!("{id} (Cursor)"),
+                            id,
+                        });
+                    }
+                }
             }
         }
         "opencode" => {

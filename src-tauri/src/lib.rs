@@ -20,6 +20,7 @@ mod codex_usage;
 mod conflict_resolution;
 mod contract_check;
 mod crash_watch;
+mod cursor_sessions;
 mod diagnostics;
 mod discord_presence;
 mod economy_agents;
@@ -401,6 +402,7 @@ pub fn run() {
             handoff::materialize_agent_handoff,
             handoff::complete_agent_handoff,
             antigravity_sessions::snapshot_antigravity_sessions,
+            cursor_sessions::create_cursor_chat,
             claude_usage::get_claude_usage,
             codex_usage::get_codex_usage,
             antigravity_usage::get_antigravity_usage,

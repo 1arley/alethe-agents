@@ -22,6 +22,7 @@ import {
 } from '../../lib/sessionDiscovery'
 import { buildAgentLaunch } from '../../lib/sessionLaunch'
 import {
+  conversationFields,
   peekSession,
   removeSession,
   savedConversationIdFor,
@@ -36,6 +37,7 @@ import {
   aiMemoryOpenCodeConfigWrite,
   attachPty,
   clearPtyScrollback,
+  createCursorChat,
   findCliLauncher,
   graphifyCodexConfigWrite,
   graphifyEnsureGraph,
@@ -852,7 +854,7 @@ export function useXtermSession(params: {
       }
     })
 
-    const RESUMABLE_AGENTS = ['claude', 'codex', 'opencode', 'antigravity']
+    const RESUMABLE_AGENTS = ['claude', 'codex', 'cursor', 'opencode', 'antigravity']
 
     async function start() {
       try {
@@ -966,6 +968,13 @@ export function useXtermSession(params: {
               onSessionIdRef.current?.(undefined)
             }
           } catch {}
+          if (disposed) return
+        }
+
+        // Cursor keeps its chats in an opaque store, so there is nothing to scan for afterwards:
+        // the pane asks the CLI for a chat up front and holds that ID for every later relaunch.
+        if (command === 'cursor' && !resumeId && cwd) {
+          resumeId = (await createCursorChat(cwd).catch(() => undefined)) || undefined
           if (disposed) return
         }
 
@@ -1156,10 +1165,7 @@ export function useXtermSession(params: {
         if (command && RESUMABLE_AGENTS.includes(command)) {
           saveSession(sessionPersistenceKey, {
             sessionId: response.id,
-            claudeSessionId: command === 'claude' ? launch.sessionId : undefined,
-            codexSessionId: command === 'codex' ? launch.sessionId : undefined,
-            opencodeSessionId: command === 'opencode' ? launch.sessionId : undefined,
-            antigravitySessionId: command === 'antigravity' ? launch.sessionId : undefined,
+            ...conversationFields(command, launch.sessionId),
             cwd: cwd ?? '',
             agent: command,
             timestamp: Date.now(),
@@ -1216,10 +1222,7 @@ export function useXtermSession(params: {
                 if (newSession) {
                   saveSession(sessionPersistenceKey, {
                     sessionId: response.id,
-                    claudeSessionId: command === 'claude' ? newSession.id : undefined,
-                    codexSessionId: command === 'codex' ? newSession.id : undefined,
-                    antigravitySessionId: command === 'antigravity' ? newSession.id : undefined,
-                    opencodeSessionId: command === 'opencode' ? newSession.id : undefined,
+                    ...conversationFields(command, newSession.id),
                     cwd: cwd ?? '',
                     agent: command,
                     timestamp: Date.now(),
@@ -1309,11 +1312,7 @@ export function useXtermSession(params: {
             completionMonitor = null
             return
           }
-          const isAgent =
-            command === 'claude' ||
-            command === 'codex' ||
-            command === 'opencode' ||
-            command === 'antigravity'
+          const isAgent = command ? RESUMABLE_AGENTS.includes(command) : false
           const elapsed = Date.now() - spawnedAtRef.current
 
           if (

@@ -18,7 +18,7 @@ import {
   mcpSync,
 } from '../../lib/tauri'
 import type { McpAgent, McpEnvEntry, McpServerRecord } from '../../lib/types'
-import { AGENT_TYPE_LABELS, MCP_AGENTS } from '../../lib/types'
+import { AGENT_TYPE_LABELS, MCP_AGENTS, MCP_HEALTH_AGENTS } from '../../lib/types'
 import { useMcpStore } from '../../stores/mcpStore'
 import { useProjectsStore } from '../../stores/projectsStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -508,7 +508,7 @@ function ServerDetail({
                   {record.sourcePath}
                 </span>
                 <span className={styles.agentActions}>
-                  {agent !== 'antigravity' ? (
+                  {MCP_HEALTH_AGENTS.includes(agent) ? (
                     <button
                       type="button"
                       className={`${controls.btn} ${controls.btnSm}`}

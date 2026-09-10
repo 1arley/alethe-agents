@@ -896,7 +896,7 @@ function NoWorkspace({
   )
   const quickAgents = useMemo(
     () =>
-      (['claude', 'codex', 'antigravity', 'opencode', 'shell'] as AgentType[]).filter(
+      (['claude', 'codex', 'cursor', 'antigravity', 'opencode', 'shell'] as AgentType[]).filter(
         (agent) => enabledAgents[agent],
       ),
     [enabledAgents],

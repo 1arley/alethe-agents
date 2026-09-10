@@ -1,10 +1,19 @@
 export type AgentType =
-  'shell' | 'claude' | 'codex' | 'copilot' | 'opencode' | 'freebuff' | 'mimo' | 'antigravity'
+  | 'shell'
+  | 'claude'
+  | 'codex'
+  | 'copilot'
+  | 'cursor'
+  | 'opencode'
+  | 'freebuff'
+  | 'mimo'
+  | 'antigravity'
 
 export const AGENT_TYPE_LABELS: Record<AgentType, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   copilot: 'GitHub Copilot',
+  cursor: 'Cursor',
   antigravity: 'Antigravity',
   opencode: 'OpenCode',
   mimo: 'Mimo',
@@ -16,6 +25,7 @@ export const ALL_AGENT_TYPES: AgentType[] = [
   'claude',
   'codex',
   'copilot',
+  'cursor',
   'antigravity',
   'opencode',
   'mimo',
@@ -23,9 +33,15 @@ export const ALL_AGENT_TYPES: AgentType[] = [
   'shell',
 ]
 
+/** CLI binaries whose name differs from the agent id (`agy`, `cursor-agent`). */
+const AGENT_CLI_COMMANDS: Partial<Record<AgentType, string>> = {
+  antigravity: 'agy',
+  cursor: 'cursor-agent',
+}
+
 export function agentCliCommand(agent: AgentType): string | undefined {
   if (agent === 'shell') return undefined
-  return agent === 'antigravity' ? 'agy' : agent
+  return AGENT_CLI_COMMANDS[agent] ?? agent
 }
 
 export type Locale = 'en' | 'pt-BR'
@@ -143,6 +159,7 @@ export const UNRESTRICTED_FLAG: Record<AgentType, string | null> = {
   claude: '--dangerously-skip-permissions',
   codex: '--dangerously-bypass-approvals-and-sandbox',
   copilot: '--allow-all',
+  cursor: '--force',
   opencode: '--dangerously-skip-permissions',
 
   freebuff: null,
@@ -575,6 +592,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
     claude: true,
     codex: true,
     copilot: true,
+    cursor: true,
     antigravity: true,
     opencode: true,
     freebuff: true,
@@ -694,6 +712,9 @@ export const PROVIDER_MODELS: Record<AgentType, { id: string; label: string }[]>
     { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
   ],
   copilot: [],
+  // Cursor rotates its model list per account and answers `cursor-agent models`, so nothing is
+  // hardcoded here — discovery fills the picker.
+  cursor: [],
   opencode: [
     { id: 'deepseek/deepseek-r1', label: 'DeepSeek R1 (Raciocínio)' },
     { id: 'deepseek/deepseek-chat', label: 'DeepSeek V3' },
@@ -715,9 +736,18 @@ export const PROVIDER_MODELS: Record<AgentType, { id: string; label: string }[]>
 
 export type McpScope = 'global' | 'project'
 
-export type McpAgent = Extract<AgentType, 'claude' | 'codex' | 'opencode' | 'antigravity'>
+export type McpAgent = Extract<
+  AgentType,
+  'claude' | 'codex' | 'cursor' | 'opencode' | 'antigravity'
+>
 
-export const MCP_AGENTS: McpAgent[] = ['claude', 'codex', 'opencode', 'antigravity']
+export const MCP_AGENTS: McpAgent[] = ['claude', 'codex', 'cursor', 'opencode', 'antigravity']
+
+/**
+ * Agents whose CLI can report how each configured server is actually doing. The others only have
+ * their config file read back, so the panel has no live status to offer for them.
+ */
+export const MCP_HEALTH_AGENTS: McpAgent[] = ['claude', 'codex', 'opencode']
 
 /** Literal values never leave Rust: `preview` is masked, use mcpRevealEnv for the real one. */
 export type McpEnvEntry = {

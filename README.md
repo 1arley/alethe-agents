@@ -97,6 +97,7 @@ Cross-platform (Windows, macOS, Linux), local-first, built with Tauri, Rust, Rea
 | **Claude Code** | `claude` | Session resume, usage cards, local history |
 | **Codex** | `codex` | Session resume, usage cards |
 | **GitHub Copilot CLI** | `copilot` | |
+| **Cursor** | `cursor-agent` | Session resume |
 | **Antigravity** | `agy` | Usage cards |
 | **OpenCode** | `opencode` | Session resume |
 | **Mimo** | `mimo` | |
@@ -121,7 +122,7 @@ registry, npm/pnpm/Volta/fnm/nvm/Bun/Cargo/Scoop/Chocolatey, and can be pointed 
 
 **Keep the context**
 
-- Sessions of Claude Code, Codex, and OpenCode resume after a crash or a restart.
+- Sessions of Claude Code, Codex, Cursor, and OpenCode resume after a crash or a restart.
 - **Recent chats** lists the conversations of a pane's working directory and reopens any of them.
 - A Claude Code conversation can be **handed off to Codex** (and back) through a locally redacted
   context packet — no copy-pasting the thread by hand. Redaction is best effort, so review the packet
@@ -131,9 +132,9 @@ registry, npm/pnpm/Volta/fnm/nvm/Bun/Cargo/Scoop/Chocolatey, and can be pointed 
 **Manage what the agents share**
 
 - **MCP tab**: every MCP server configured on the machine, grouped by server and showing which agents
-  have it — read from Claude Code, Codex, OpenCode, and Antigravity configs. Add, remove, copy a
-  server from one agent to another, search the official registry, and ask each agent to verify it can
-  really reach a server. Every write is backed up, re-parsed, and committed atomically.
+  have it — read from Claude Code, Codex, Cursor, OpenCode, and Antigravity configs. Add, remove,
+  copy a server from one agent to another, search the official registry, and ask each agent to verify
+  it can really reach a server. Every write is backed up, re-parsed, and committed atomically.
 - **Skills tab**: the skills installed for each agent, with links and shared stores resolved so a
   shared skill shows up once.
 - **Graphify**: a code graph of the project, served to the agents as an MCP server.

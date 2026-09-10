@@ -12,6 +12,14 @@ export async function snapshotAntigravitySessions(
   return invoke<AntigravitySessionSnapshot[]>('snapshot_antigravity_sessions', { cwd })
 }
 
+/**
+ * Opens an empty Cursor chat and returns its ID. Cursor keeps its conversations in an opaque
+ * store, so this is the only way a pane can know which chat to `--resume` later.
+ */
+export async function createCursorChat(cwd: string): Promise<string> {
+  return invoke<string>('create_cursor_chat', { cwd })
+}
+
                                                             
 export type ModelCost = {
   model: string
