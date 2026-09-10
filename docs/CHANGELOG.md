@@ -10,6 +10,15 @@ Notable user-facing changes to **Alethe** are documented here. The format is bas
 
 ## [Unreleased]
 
+### Fixed
+
+- Installing a CLI from inside Alethe no longer ends in a dialog that spins forever. The install
+  screen now watches for the CLI itself while the installer runs, instead of waiting only for the
+  installer's shell to exit — some of them hand the prompt back or leave a progress bar behind and
+  never exit — so the dialog closes on its own as soon as the CLI is really there. Detection also
+  re-reads the machine's environment on every check, so a CLI that adds itself to PATH is found
+  without restarting the app.
+
 ### Added
 
 - Git status decorations and standard file type icons in the File Explorer. Changed, uncommitted,

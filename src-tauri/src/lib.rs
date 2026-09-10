@@ -332,6 +332,7 @@ pub fn run() {
             profiles::rename_profile,
             profiles::delete_profile,
             cli_resolver::find_cli_launcher,
+            cli_resolver::refresh_cli_launcher,
             cli_resolver::probe_install_toolchain,
             cli_resolver::agent_cli_version,
             cli_launch::cli_take_pending_open,

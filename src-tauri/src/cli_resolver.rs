@@ -3,13 +3,14 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 use std::time::SystemTime;
 
 #[cfg(windows)]
 use winreg::{enums::*, RegKey};
 
-static REBUILT_PATH: OnceLock<String> = OnceLock::new();
+/// `None` until the first lookup, and reset to it by `invalidate_rebuilt_path` after an install.
+static REBUILT_PATH: RwLock<Option<String>> = RwLock::new(None);
 
 pub fn default_shell() -> String {
     #[cfg(windows)]
@@ -574,7 +575,37 @@ fn scrub_editor_environment(builder: &mut CommandBuilder) {
 }
 
 pub fn rebuilt_path() -> String {
-    REBUILT_PATH.get_or_init(build_rebuilt_path).clone()
+    if let Ok(cached) = REBUILT_PATH.read() {
+        if let Some(value) = cached.as_ref() {
+            return value.clone();
+        }
+    }
+    let built = build_rebuilt_path();
+    if let Ok(mut cached) = REBUILT_PATH.write() {
+        *cached = Some(built.clone());
+    }
+    built
+}
+
+/// Drops the cached PATH so the next lookup reads what an installer just wrote to the registry.
+/// Windows only hands a new environment to processes started after the change, and this one is
+/// long-lived: without this, a CLI installed from inside Alethe stays invisible until a restart.
+pub fn invalidate_rebuilt_path() {
+    if let Ok(mut cached) = REBUILT_PATH.write() {
+        *cached = None;
+    }
+}
+
+/// Re-reads the machine's environment, then reports the launcher for `command` — what an install
+/// screen calls to find out whether the CLI it was installing has actually landed.
+#[tauri::command]
+pub async fn refresh_cli_launcher(command: String) -> Option<String> {
+    tokio::task::spawn_blocking(move || {
+        invalidate_rebuilt_path();
+        find_windows_cli_launcher(&command).map(|path| path.to_string_lossy().to_string())
+    })
+    .await
+    .unwrap_or(None)
 }
 
 pub(crate) fn build_rebuilt_path() -> String {
