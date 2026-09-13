@@ -91,6 +91,8 @@ export type Theme =
   | 'elite-pure-black'
   | 'elite-indigo'
   | 'elite-blush'
+  | 'catppuccin-frappe'
+  | 'gruvbox-material'
 
 /** Native desktop icon variants. The UI theme and app icon theme are independent. */
 export type AppIconTheme = 'elite-original' | 'elite-pure-black' | 'elite-indigo' | 'elite-blush'

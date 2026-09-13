@@ -805,6 +805,10 @@ export const ptBR: Record<MessageKey, string> = {
   'theme.golden-premium.label': 'Dourado Premium',
   'theme.golden-premium.desc':
     'Luxuoso marrom escuro e pretos profundos com elegantes detalhes dourados.',
+  'theme.catppuccin-frappe.label': 'Catppuccin Frappé',
+  'theme.catppuccin-frappe.desc': 'Superfícies ardósia frias com acento rosa suave.',
+  'theme.gruvbox-material.label': 'Gruvbox Material',
+  'theme.gruvbox-material.desc': 'Tons terrosos dessaturados sobre fundo escuro intenso.',
   'todo.tagsPlaceholder': 'Tags: docs, fix',
   'todo.linkProject': 'Vincular tarefa a um projeto',
   'todo.noProject': 'Nenhum projeto',
