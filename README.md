@@ -316,10 +316,11 @@ Thanks to everyone helping shape Alethe.
   <a href="https://github.com/lucapohl-angel"><img src="https://github.com/lucapohl-angel.png?size=100" width="80" height="80" alt="lucapohl-angel" title="lucapohl-angel" /></a>
   <a href="https://github.com/1arley"><img src="https://github.com/1arley.png?size=100" width="80" height="80" alt="1arley" title="1arley" /></a>
   <a href="https://github.com/potatoiscompiled"><img src="https://github.com/potatoiscompiled.png?size=100" width="80" height="80" alt="potatoiscompiled" title="potatoiscompiled" /></a>
-  <a href="https://github.com/GustavoAlmeidaPuff"><img src="https://github.com/GustavoAlmeidaPuff.png?size=100" width="80" height="80" alt="GustavoAlmeidaPuff" title="GustavoAlmeidaPuff" /></a>
+  <a href="https://github.com/GustavoAlmeidaDoNascimento"><img src="https://github.com/GustavoAlmeidaDoNascimento.png?size=100" width="80" height="80" alt="GustavoAlmeidaDoNascimento" title="GustavoAlmeidaDoNascimento" /></a>
   <a href="https://github.com/Jbnado"><img src="https://github.com/Jbnado.png?size=100" width="80" height="80" alt="Jbnado" title="Jbnado" /></a>
   <a href="https://github.com/chintanparmar011"><img src="https://github.com/chintanparmar011.png?size=100" width="80" height="80" alt="chintanparmar011" title="chintanparmar011" /></a>
   <a href="https://github.com/AshSgDe29071999"><img src="https://github.com/AshSgDe29071999.png?size=100" width="80" height="80" alt="AshSgDe29071999" title="AshSgDe29071999" /></a>
+  <a href="https://github.com/sthevan027"><img src="https://github.com/sthevan027.png?size=100" width="80" height="80" alt="sthevan027" title="sthevan027" /></a>
   <a href="https://github.com/rlevidev"><img src="https://github.com/rlevidev.png?size=100" width="80" height="80" alt="rlevidev" title="rlevidev" /></a>
   <a href="https://github.com/mapsiva"><img src="https://github.com/mapsiva.png?size=100" width="80" height="80" alt="mapsiva" title="mapsiva" /></a>
   <a href="https://github.com/moisesz10"><img src="https://github.com/moisesz10.png?size=100" width="80" height="80" alt="moisesz10" title="moisesz10" /></a>
@@ -342,6 +343,7 @@ Thanks to everyone helping shape Alethe.
   <a href="https://github.com/devmatheusmota"><img src="https://github.com/devmatheusmota.png?size=100" width="80" height="80" alt="devmatheusmota" title="devmatheusmota" /></a>
   <a href="https://github.com/JohnPss"><img src="https://github.com/JohnPss.png?size=100" width="80" height="80" alt="JohnPss" title="JohnPss" /></a>
   <a href="https://github.com/GabrielKLopes"><img src="https://github.com/GabrielKLopes.png?size=100" width="80" height="80" alt="GabrielKLopes" title="GabrielKLopes" /></a>
+  <a href="https://github.com/pinhaum"><img src="https://github.com/pinhaum.png?size=100" width="80" height="80" alt="pinhaum" title="pinhaum" /></a>
   <a href="https://github.com/floze-the-genius"><img src="https://github.com/floze-the-genius.png?size=100" width="80" height="80" alt="floze-the-genius" title="floze-the-genius" /></a>
   <a href="https://github.com/aryansk"><img src="https://github.com/aryansk.png?size=100" width="80" height="80" alt="aryansk" title="aryansk" /></a>
   <a href="https://github.com/sousaakira"><img src="https://github.com/sousaakira.png?size=100" width="80" height="80" alt="sousaakira" title="sousaakira" /></a>
