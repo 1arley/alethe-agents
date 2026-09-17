@@ -21,6 +21,10 @@ Notable user-facing changes to **Alethe** are documented here. The format is bas
 
 ### Added
 
+- Two new themes: **Catppuccin Frappé** (cool slate surfaces with a soft pink accent) and
+  **Gruvbox Material** (muted earthy tones on a hard dark background). Both cover the full UI
+  palette and ship a matching 16-colour terminal palette, and are selectable under
+  Preferences > Appearance.
 - Git status decorations and standard file type icons in the File Explorer. Changed, uncommitted,
   untracked, staged, deleted, and conflicted files now display standard VS Code-like status colors
   (amber for modified, green for untracked/added, red for deleted/conflict) and badge letters (`M`,
