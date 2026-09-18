@@ -137,6 +137,12 @@ Notable user-facing changes to **Alethe** are documented here. The format is bas
 
 ### Changed
 
+- **Open-source and brand terms clarified.** Alethe remains licensed under
+  AGPL-3.0-or-later so covered derivatives stay open source, while the Alethe name,
+  logo, application icon, and official branding are expressly reserved to Kauã Miguel.
+  Modified builds must use independent branding, and commercial use of the Alethe
+  brand requires prior written permission.
+
 - Redesigned the Alethe Remote home list to match the desktop Project Sidebar: a folder icon tinted
   by the project's own color replaces the old initials avatar, groups render as a plain label with a
   hairline rule instead of a boxed section, and chats sit indented under their project with the
