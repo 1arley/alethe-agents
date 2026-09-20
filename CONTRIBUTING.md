@@ -202,8 +202,9 @@ CSS Modules + custom properties. No Tailwind, no styled-components, no global st
 
 **4. Feature changes update the changelog.**
 Any feature added, changed, or removed gets a short, user-facing line in
-[`docs/CHANGELOG.md`](docs/CHANGELOG.md) under the `[Não lançado]` section at the top. Release
-notes are generated from it. Pure bug fixes and refactors don't need an entry.
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md) under the `[Unreleased]` section at the top. That section
+becomes the dated version at release time, and the release notes are written from it — see
+[`docs/RELEASING.md`](docs/RELEASING.md). Pure bug fixes and refactors don't need an entry.
 
 **5. Reuse the domain types.**
 New domain types go in `src/lib/types.ts`. Check what's there before defining a near-duplicate.
