@@ -152,7 +152,10 @@ fn history_outlives_the_process_and_in_flight_work_is_not_reported_as_running() 
         json!({ "tasks": ["keep this"], "cwd": dir.to_string_lossy(), "label": "a run" }),
     );
     std::thread::sleep(std::time::Duration::from_millis(300));
-    assert!(store.exists(), "the store must be written as work is created");
+    assert!(
+        store.exists(),
+        "the store must be written as work is created"
+    );
 
     let second = Core::default();
     second.set_store(store);
@@ -167,7 +170,8 @@ fn history_outlives_the_process_and_in_flight_work_is_not_reported_as_running() 
         "a worker whose process is gone must not be shown as running"
     );
     assert_eq!(
-        second.snapshot()["running"], 0,
+        second.snapshot()["running"],
+        0,
         "restored work holds no slot"
     );
 
@@ -266,7 +270,9 @@ fn answering_is_refused_when_nothing_is_waiting() {
     );
     std::thread::sleep(std::time::Duration::from_millis(300));
 
-    let refused = core.answer("job-01", "accept").expect_err("nothing to answer");
+    let refused = core
+        .answer("job-01", "accept")
+        .expect_err("nothing to answer");
     assert!(refused.contains("not waiting"), "got: {refused}");
 
     let unknown = core.answer("job-99", "accept").expect_err("no such job");
@@ -313,7 +319,10 @@ fn checking_with_no_work_returns_at_once() {
     let core = Core::default();
     let result = call(&core, "alethe_check", json!({ "wait": true }));
     assert_eq!(result["workersStillBusy"], json!(0), "{result}");
-    assert_eq!(result["deliveries"].as_array().expect("deliveries").len(), 0);
+    assert_eq!(
+        result["deliveries"].as_array().expect("deliveries").len(),
+        0
+    );
 }
 
 #[test]
@@ -327,7 +336,11 @@ fn a_job_fails_cleanly_when_no_launcher_is_configured() {
     );
     assert_eq!(delegated["accepted"], json!(1), "{delegated}");
 
-    let checked = call(&core, "alethe_check", json!({ "wait": true, "timeoutMs": 5000 }));
+    let checked = call(
+        &core,
+        "alethe_check",
+        json!({ "wait": true, "timeoutMs": 5000 }),
+    );
     let deliveries = checked["deliveries"].as_array().expect("deliveries");
     assert_eq!(deliveries.len(), 1, "{checked}");
     assert_eq!(deliveries[0]["outcome"], json!("failed"));
@@ -404,7 +417,10 @@ fn two_workers_overlap_and_check_waits_for_both() {
         "both workers must land in one call: {checked}"
     );
     assert_eq!(peak, 2, "the workers never overlapped");
-    assert!(dir.join("ALPHA.txt").exists(), "ALPHA.txt missing: {checked}");
+    assert!(
+        dir.join("ALPHA.txt").exists(),
+        "ALPHA.txt missing: {checked}"
+    );
     assert!(dir.join("BETA.txt").exists(), "BETA.txt missing: {checked}");
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -477,7 +493,11 @@ fn fake_claude_launcher(dir: &std::path::Path, transcript: &str) -> Launcher {
     Launcher {
         kind: "claude".into(),
         program: PathBuf::from("cmd"),
-        args: vec!["/c".into(), "type".into(), path.to_string_lossy().into_owned()],
+        args: vec![
+            "/c".into(),
+            "type".into(),
+            path.to_string_lossy().into_owned(),
+        ],
         env: Vec::new(),
     }
 }
@@ -486,10 +506,15 @@ fn fake_claude_launcher(dir: &std::path::Path, transcript: &str) -> Launcher {
 fn a_claude_worker_reports_its_result_and_tokens() {
     let dir = workspace("claude-worker");
     let core = Core::default();
+    let store = dir.join("orchestrator.json");
+    core.set_store(store.clone());
     let transcript = concat!(
-        r#"{"type":"system","subtype":"init","session_id":"fake-session-1"}"#, "\n",
-        r#"{"type":"assistant","message":{"content":[{"type":"text","text":"working on it"}]}}"#, "\n",
-        r#"{"type":"result","is_error":false,"result":"CLAUDE_DONE_OK","usage":{"input_tokens":3,"output_tokens":5}}"#, "\n",
+        r#"{"type":"system","subtype":"init","session_id":"fake-session-1"}"#,
+        "\n",
+        r#"{"type":"assistant","message":{"content":[{"type":"text","text":"working on it"}]}}"#,
+        "\n",
+        r#"{"type":"result","is_error":false,"result":"CLAUDE_DONE_OK","total_cost_usd":0.0123,"usage":{"input_tokens":3,"output_tokens":5,"cache_read_input_tokens":7}}"#,
+        "\n",
     );
     core.set_launcher(fake_claude_launcher(&dir, transcript));
 
@@ -507,8 +532,18 @@ fn a_claude_worker_reports_its_result_and_tokens() {
     assert_eq!(job["outcome"], "succeeded");
     assert_eq!(job["threadId"], "fake-session-1");
     assert_eq!(job["summary"], "CLAUDE_DONE_OK");
-    assert_eq!(job["tokens"]["input_tokens"], 3);
-    assert_eq!(job["tokens"]["output_tokens"], 5);
+    assert_eq!(job["tokens"]["total"]["totalTokens"], 15);
+    assert_eq!(job["tokens"]["total"]["inputTokens"], 3);
+    assert_eq!(job["tokens"]["last"]["outputTokens"], 5);
+    assert_eq!(job["costUsd"], 0.0123);
+
+    let restored = Core::default();
+    restored.set_store(store);
+    restored.restore();
+    let restored_snapshot = restored.snapshot();
+    let restored_job = &restored_snapshot["jobs"][0];
+    assert_eq!(restored_job["tokens"]["total"]["totalTokens"], 15);
+    assert_eq!(restored_job["costUsd"], 0.0123);
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -541,8 +576,10 @@ fn a_claude_worker_picks_up_its_own_uncommitted_changes_as_a_diff() {
 
     let core = Core::default();
     let transcript = concat!(
-        r#"{"type":"system","subtype":"init","session_id":"fake-session-diff"}"#, "\n",
-        r#"{"type":"result","is_error":false,"result":"CHANGED_FILE_OK","usage":{"input_tokens":1,"output_tokens":1}}"#, "\n",
+        r#"{"type":"system","subtype":"init","session_id":"fake-session-diff"}"#,
+        "\n",
+        r#"{"type":"result","is_error":false,"result":"CHANGED_FILE_OK","usage":{"input_tokens":1,"output_tokens":1}}"#,
+        "\n",
     );
     core.set_launcher(fake_claude_launcher(&dir, transcript));
 
@@ -574,7 +611,11 @@ fn delegating_to_an_unconfigured_agent_fails_cleanly_like_any_other_agent() {
     );
     assert_eq!(delegated["accepted"], json!(1), "{delegated}");
 
-    let checked = call(&core, "alethe_check", json!({ "wait": true, "timeoutMs": 5000 }));
+    let checked = call(
+        &core,
+        "alethe_check",
+        json!({ "wait": true, "timeoutMs": 5000 }),
+    );
     let deliveries = checked["deliveries"].as_array().expect("deliveries");
     assert_eq!(deliveries.len(), 1, "{checked}");
     assert_eq!(deliveries[0]["outcome"], json!("failed"));
@@ -689,14 +730,24 @@ fn isolating_gives_each_worker_its_own_worktree() {
     let jobs = delegated["jobs"].as_array().expect("jobs");
     let mut paths = Vec::new();
     for job in jobs {
-        let path = job["worktree"].as_str().expect("a worktree path").to_string();
+        let path = job["worktree"]
+            .as_str()
+            .expect("a worktree path")
+            .to_string();
         let seeded = PathBuf::from(&path).join("seed.txt");
         assert!(seeded.exists(), "worktree was not checked out at {path}");
         paths.push(path);
     }
-    assert_ne!(paths[0], paths[1], "both workers landed in the same directory");
+    assert_ne!(
+        paths[0], paths[1],
+        "both workers landed in the same directory"
+    );
 
-    let _ = call(&core, "alethe_check", json!({ "wait": true, "timeoutMs": 30000 }));
+    let _ = call(
+        &core,
+        "alethe_check",
+        json!({ "wait": true, "timeoutMs": 30000 }),
+    );
     for path in &paths {
         let _ = Command::new("git")
             .args(["worktree", "remove", "--force", path])
@@ -739,8 +790,10 @@ fn steering_a_running_claude_worker_interrupts_instead_of_waiting_out_the_turn()
     let dir = workspace("claude-steer-live");
     let core = Core::default();
     let transcript = concat!(
-        r#"{"type":"system","subtype":"init","session_id":"steer-session"}"#, "\n",
-        r#"{"type":"assistant","message":{"content":[{"type":"text","text":"heading the wrong way"}]}}"#, "\n",
+        r#"{"type":"system","subtype":"init","session_id":"steer-session"}"#,
+        "\n",
+        r#"{"type":"assistant","message":{"content":[{"type":"text","text":"heading the wrong way"}]}}"#,
+        "\n",
     );
     core.set_launcher(fake_claude_holding_launcher(&dir, transcript));
 
@@ -751,7 +804,10 @@ fn steering_a_running_claude_worker_interrupts_instead_of_waiting_out_the_turn()
     );
     std::thread::sleep(std::time::Duration::from_millis(600));
 
-    let job_id = core.snapshot()["jobs"][0]["id"].as_str().expect("a job id").to_string();
+    let job_id = core.snapshot()["jobs"][0]["id"]
+        .as_str()
+        .expect("a job id")
+        .to_string();
     assert_eq!(core.snapshot()["jobs"][0]["status"], "running");
 
     let steered = call(
@@ -760,9 +816,13 @@ fn steering_a_running_claude_worker_interrupts_instead_of_waiting_out_the_turn()
         json!({ "jobId": &job_id, "message": "turn around" }),
     );
     assert_eq!(steered["steered"], json!(job_id), "{steered}");
-    assert!(steered.get("queued").is_none(), "the steer only queued: {steered}");
+    assert!(
+        steered.get("queued").is_none(),
+        "the steer only queued: {steered}"
+    );
     assert_eq!(
-        core.snapshot()["jobs"][0]["status"], "running",
+        core.snapshot()["jobs"][0]["status"],
+        "running",
         "the interrupt settled the job instead of restarting it"
     );
 
@@ -775,8 +835,10 @@ fn steering_a_settled_claude_worker_queues_the_next_turn() {
     let dir = workspace("claude-steer-idle");
     let core = Core::default();
     let transcript = concat!(
-        r#"{"type":"system","subtype":"init","session_id":"idle-session"}"#, "\n",
-        r#"{"type":"result","is_error":false,"result":"CLAUDE_DONE_OK"}"#, "\n",
+        r#"{"type":"system","subtype":"init","session_id":"idle-session"}"#,
+        "\n",
+        r#"{"type":"result","is_error":false,"result":"CLAUDE_DONE_OK"}"#,
+        "\n",
     );
     core.set_launcher(fake_claude_launcher(&dir, transcript));
 
@@ -787,7 +849,10 @@ fn steering_a_settled_claude_worker_queues_the_next_turn() {
     );
     std::thread::sleep(std::time::Duration::from_millis(500));
 
-    let job_id = core.snapshot()["jobs"][0]["id"].as_str().expect("a job id").to_string();
+    let job_id = core.snapshot()["jobs"][0]["id"]
+        .as_str()
+        .expect("a job id")
+        .to_string();
     assert_eq!(core.snapshot()["jobs"][0]["status"], "done");
 
     let steered = call(
@@ -804,7 +869,10 @@ fn steering_a_settled_claude_worker_queues_the_next_turn() {
 #[test]
 fn every_tool_response_carries_the_current_headroom() {
     let core = Core::default();
-    core.set_agent_fitness("claude", json!({ "worst": "week", "used": 19, "rateLimited": false }));
+    core.set_agent_fitness(
+        "claude",
+        json!({ "worst": "week", "used": 19, "rateLimited": false }),
+    );
     core.set_agent_fitness(
         "codex",
         json!({ "worst": "week", "used": 60, "plan": "plus", "rateLimited": false }),
@@ -824,8 +892,14 @@ fn every_tool_response_carries_the_current_headroom() {
 #[test]
 fn the_worst_window_decides_headroom_even_when_the_five_hour_ones_are_tied() {
     let core = Core::default();
-    core.set_agent_fitness("claude", json!({ "worst": "week", "used": 19, "rateLimited": false }));
-    core.set_agent_fitness("codex", json!({ "worst": "week", "used": 60, "rateLimited": false }));
+    core.set_agent_fitness(
+        "claude",
+        json!({ "worst": "week", "used": 19, "rateLimited": false }),
+    );
+    core.set_agent_fitness(
+        "codex",
+        json!({ "worst": "week", "used": 60, "rateLimited": false }),
+    );
 
     let status = call(&core, "alethe_status", json!({}));
     assert_eq!(status["fitness"]["headroom"], "claude", "{status}");
@@ -836,8 +910,14 @@ fn delegating_to_an_exhausted_agent_names_the_other_side() {
     let dir = workspace("headroom-hint");
     let core = Core::default();
     core.set_launcher(silent_launcher());
-    core.set_agent_fitness("claude", json!({ "worst": "week", "used": 12, "rateLimited": false }));
-    core.set_agent_fitness("codex", json!({ "worst": "week", "used": 91, "rateLimited": false }));
+    core.set_agent_fitness(
+        "claude",
+        json!({ "worst": "week", "used": 12, "rateLimited": false }),
+    );
+    core.set_agent_fitness(
+        "codex",
+        json!({ "worst": "week", "used": 91, "rateLimited": false }),
+    );
 
     let delegated = call(
         &core,
@@ -845,10 +925,19 @@ fn delegating_to_an_exhausted_agent_names_the_other_side() {
         json!({ "tasks": ["something"], "cwd": dir.to_string_lossy(), "agent": "codex" }),
     );
     assert_eq!(delegated["headroomHint"]["agent"], "claude", "{delegated}");
-    let reason = delegated["headroomHint"]["reason"].as_str().unwrap_or_default();
-    assert!(reason.contains("91"), "the hint hides the number it is grounded in: {reason}");
+    let reason = delegated["headroomHint"]["reason"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(
+        reason.contains("91"),
+        "the hint hides the number it is grounded in: {reason}"
+    );
 
-    let _ = call(&core, "alethe_cancel", json!({ "jobIds": [delegated["jobs"][0]["id"].clone()] }));
+    let _ = call(
+        &core,
+        "alethe_cancel",
+        json!({ "jobIds": [delegated["jobs"][0]["id"].clone()] }),
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -857,8 +946,14 @@ fn a_rested_agent_gets_no_hint() {
     let dir = workspace("headroom-quiet");
     let core = Core::default();
     core.set_launcher(silent_launcher());
-    core.set_agent_fitness("claude", json!({ "worst": "week", "used": 12, "rateLimited": false }));
-    core.set_agent_fitness("codex", json!({ "worst": "week", "used": 40, "rateLimited": false }));
+    core.set_agent_fitness(
+        "claude",
+        json!({ "worst": "week", "used": 12, "rateLimited": false }),
+    );
+    core.set_agent_fitness(
+        "codex",
+        json!({ "worst": "week", "used": 40, "rateLimited": false }),
+    );
 
     let delegated = call(
         &core,
@@ -870,7 +965,11 @@ fn a_rested_agent_gets_no_hint() {
         "nagged about headroom that is not running out: {delegated}"
     );
 
-    let _ = call(&core, "alethe_cancel", json!({ "jobIds": [delegated["jobs"][0]["id"].clone()] }));
+    let _ = call(
+        &core,
+        "alethe_cancel",
+        json!({ "jobIds": [delegated["jobs"][0]["id"].clone()] }),
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -879,8 +978,14 @@ fn the_board_records_why_a_worker_ran_where_it_ran() {
     let dir = workspace("routing-trace");
     let core = Core::default();
     core.set_launcher(silent_launcher());
-    core.set_agent_fitness("claude", json!({ "worst": "week", "used": 12, "rateLimited": false }));
-    core.set_agent_fitness("codex", json!({ "worst": "week", "used": 91, "rateLimited": false }));
+    core.set_agent_fitness(
+        "claude",
+        json!({ "worst": "week", "used": 12, "rateLimited": false }),
+    );
+    core.set_agent_fitness(
+        "codex",
+        json!({ "worst": "week", "used": 91, "rateLimited": false }),
+    );
 
     let ignored = call(
         &core,
@@ -904,7 +1009,10 @@ fn the_board_records_why_a_worker_ran_where_it_ran() {
             .clone()
     };
 
-    let first = ignored["jobs"][0]["id"].as_str().expect("an id").to_string();
+    let first = ignored["jobs"][0]["id"]
+        .as_str()
+        .expect("an id")
+        .to_string();
     let second = chosen["jobs"][0]["id"].as_str().expect("an id").to_string();
     assert_eq!(routing_of(&first)["verdict"], "ignored");
     assert_eq!(routing_of(&first)["used"], 91.0);
@@ -919,15 +1027,24 @@ fn a_board_with_room_on_both_sides_records_no_reason_at_all() {
     let dir = workspace("routing-quiet");
     let core = Core::default();
     core.set_launcher(silent_launcher());
-    core.set_agent_fitness("claude", json!({ "worst": "week", "used": 12, "rateLimited": false }));
-    core.set_agent_fitness("codex", json!({ "worst": "week", "used": 40, "rateLimited": false }));
+    core.set_agent_fitness(
+        "claude",
+        json!({ "worst": "week", "used": 12, "rateLimited": false }),
+    );
+    core.set_agent_fitness(
+        "codex",
+        json!({ "worst": "week", "used": 40, "rateLimited": false }),
+    );
 
     let delegated = call(
         &core,
         "alethe_delegate",
         json!({ "tasks": ["nothing notable"], "cwd": dir.to_string_lossy(), "agent": "codex" }),
     );
-    let id = delegated["jobs"][0]["id"].as_str().expect("an id").to_string();
+    let id = delegated["jobs"][0]["id"]
+        .as_str()
+        .expect("an id")
+        .to_string();
     let snapshot = core.snapshot();
     let job = snapshot["jobs"]
         .as_array()
@@ -950,8 +1067,14 @@ fn with_both_sides_strained_the_board_blames_the_worse_one_every_time() {
     let core = Core::default();
     core.set_launcher(silent_launcher());
     // The reading that came back from a real run: both past the threshold, codex worse.
-    core.set_agent_fitness("claude", json!({ "worst": "5h", "used": 80, "rateLimited": false }));
-    core.set_agent_fitness("codex", json!({ "worst": "5h", "used": 98, "rateLimited": false }));
+    core.set_agent_fitness(
+        "claude",
+        json!({ "worst": "5h", "used": 80, "rateLimited": false }),
+    );
+    core.set_agent_fitness(
+        "codex",
+        json!({ "worst": "5h", "used": 98, "rateLimited": false }),
+    );
 
     let mut ids = Vec::new();
     for _ in 0..5 {
@@ -960,7 +1083,10 @@ fn with_both_sides_strained_the_board_blames_the_worse_one_every_time() {
             "alethe_delegate",
             json!({ "tasks": ["work"], "cwd": dir.to_string_lossy(), "agent": "codex" }),
         );
-        let id = delegated["jobs"][0]["id"].as_str().expect("an id").to_string();
+        let id = delegated["jobs"][0]["id"]
+            .as_str()
+            .expect("an id")
+            .to_string();
         let snapshot = core.snapshot();
         let job = snapshot["jobs"]
             .as_array()
@@ -985,8 +1111,14 @@ fn a_hint_never_presents_an_equally_exhausted_agent_as_the_way_out() {
     let dir = workspace("hint-both-strained");
     let core = Core::default();
     core.set_launcher(silent_launcher());
-    core.set_agent_fitness("claude", json!({ "worst": "5h", "used": 80, "rateLimited": false }));
-    core.set_agent_fitness("codex", json!({ "worst": "5h", "used": 98, "rateLimited": false }));
+    core.set_agent_fitness(
+        "claude",
+        json!({ "worst": "5h", "used": 80, "rateLimited": false }),
+    );
+    core.set_agent_fitness(
+        "codex",
+        json!({ "worst": "5h", "used": 98, "rateLimited": false }),
+    );
 
     let delegated = call(
         &core,
@@ -1002,15 +1134,25 @@ fn a_hint_never_presents_an_equally_exhausted_agent_as_the_way_out() {
         "recommended a side that is itself at the ceiling without saying so: {reason}"
     );
 
-    let _ = call(&core, "alethe_cancel", json!({ "jobIds": [delegated["jobs"][0]["id"].clone()] }));
+    let _ = call(
+        &core,
+        "alethe_cancel",
+        json!({ "jobIds": [delegated["jobs"][0]["id"].clone()] }),
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn a_rate_limited_agent_outranks_any_percentage() {
     let core = Core::default();
-    core.set_agent_fitness("claude", json!({ "worst": "5h", "used": 99, "rateLimited": false }));
-    core.set_agent_fitness("codex", json!({ "worst": "5h", "used": 10, "rateLimited": true }));
+    core.set_agent_fitness(
+        "claude",
+        json!({ "worst": "5h", "used": 99, "rateLimited": false }),
+    );
+    core.set_agent_fitness(
+        "codex",
+        json!({ "worst": "5h", "used": 10, "rateLimited": true }),
+    );
 
     let status = call(&core, "alethe_status", json!({}));
     assert_eq!(
