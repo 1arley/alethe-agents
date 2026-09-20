@@ -12,6 +12,22 @@ Notable user-facing changes to **Alethe** are documented here. The format is bas
 
 ### Added
 
+- **Per-agent orchestration spend.** Worker cards now show their session cost, while the header totals reported spend by provider for the selected planner and preserves delegated-worker usage across app restarts.
+
+- **Optional project grids.** New sessions stay ungrouped by default; named grids appear only after being created and can be selected from Advanced options in the New session modal.
+
+- **Reset credit details.** The Codex reset credit is now shown as a compact button beside the credit count; clicking it opens a separate modal with expiry information and the action to use the credit.
+
+- **Named project grids.** Organize each project into separate grids with independent terminals and layouts. Switch grids from either sidebar, move terminals without ending sessions, and choose whether deleting a grid keeps or closes its terminals. Existing projects migrate to a Default grid.
+
+- **Install a plugin straight from the catalogue.** A listing that publishes a package can now
+  be installed in one click instead of being downloaded and imported by hand. The index pins each
+  package to a SHA-256 checksum, so what installs is the exact build the listing was reviewed
+  against — the manual route never had that guarantee. An installed plugin still arrives switched
+  off and still goes through the trust dialog before it can run.
+  A listing whose version differs from the installed one is flagged, so the same button updates
+  a plugin in place.
+
 - **WSL terminals.** WSL (Windows Subsystem for Linux) is now available as a terminal type
   alongside Shell in the new-terminal and new-tab pickers — it opens the default WSL distro in the
   chosen folder. It behaves like a plain shell (no agent session, resume, or completion tracking)
@@ -95,6 +111,28 @@ Notable user-facing changes to **Alethe** are documented here. The format is bas
 
 ### Fixed
 
+- File references printed by Claude and Codex, including root-level relative paths such as
+  `README.md`, are now clickable in terminal panes, open relative to that terminal's folder, and
+  copy their resolved full path from the link menu.
+
+- **Claude conversations stay with their grid panes.** Switching chats with `/new`, `/clear`, or `/resume` now updates the saved conversation even in inactive tabs and after reconnecting a terminal. Reopening the app uses the latest saved conversation, and activity in another pane no longer changes a pane's session assignment.
+
+- Remote Control no longer reopens automatically after restarting Alethe when it was left enabled
+  in saved preferences; it now requires an explicit enable action in each app session.
+- Claude and Codex session callbacks are now bound to their own terminal instance, preventing a late
+  response from one chat from renaming or reassigning another pane.
+- Repeatedly opening the MCP panel no longer starts duplicate concurrent scans, reducing resource
+  spikes when the modal is searched and closed several times.
+- MCP modal operations now stop applying results after the modal closes, and short-lived skill-scan
+  caching prevents repeated modal opens from walking all skill directories again.
+- The usage modal now explains Codex reset credits and provides a real action to consume one when
+  available, clarifying that it resets an eligible limit without deleting chats or settings.
+- The usage modal now lists available Codex limit resets with their expiry details and lets users
+  consume a specific reset credit.
+
+- **Garbled accents in the plugin catalogue text.** Several strings in the Plugins preferences
+  showed mis-encoded characters ("pÃ¡gina" instead of "página") in both languages.
+
 - The "Browser" sub-option under Playwright browser in the onboarding feature list had no icon,
   unlike every other row. It now shows the Browser module glyph, aligned with the icon column.
 - A plugin installed from disk never loaded on Windows: its files were requested at an address the
@@ -118,6 +156,30 @@ Notable user-facing changes to **Alethe** are documented here. The format is bas
   preventing `\U` TOML parse errors from blocking the receiving session.
 
 ### Changed
+
+- **Open-source and brand terms clarified.** Alethe remains licensed under
+  AGPL-3.0-or-later so covered derivatives stay open source, while the Alethe name,
+  logo, application icon, and official branding are expressly reserved to Kauã Miguel.
+  Modified builds must use independent branding, and commercial use of the Alethe
+  brand requires prior written permission.
+
+- **Interactive Remote Control questions for Codex and Claude Code.** Structured agent questions now
+  appear as touch-friendly cards on the phone, including descriptions, multiple questions, and
+  multi-select and free-form choices. Answers drive the live terminal prompt directly, with
+  stale-question validation, loading and retry states, and read-only handling. Active turns can
+  also be stopped from the phone, including turns started on the desktop that are still awaiting a
+  response. Drafts survive page reloads, shared-chat changes refresh automatically, and returning
+  from the background triggers immediate state recovery with bounded network reconnect backoff.
+  The mobile workspace list now marks working chats, unanswered questions, saved drafts, and ended
+  sessions. Each interactive prompt carries its exact agent call identity, preventing a delayed
+  phone response from answering a newer question, and conversation messages can be copied with
+  touch-friendly feedback.
+
+- **Mobile chat for Codex and Claude Code.** Chat opens by default for supported agents, with
+  conversation loading, immediate outgoing messages, delivery and response-wait feedback, faster
+  refreshes, and retry controls that preserve the visible history. Drafts survive navigation and
+  view changes; mobile Enter adds a line. Replies have clearer formatting, larger touch targets,
+  persistent expanded tool details, and a jump-to-latest control. Rate limits keep the device paired.
 
 - **The lead agent can now see how much of each vendor's limit is left.** Every orchestrator tool
   answers with the current headroom for Claude and Codex — which window is closest to full, when it
