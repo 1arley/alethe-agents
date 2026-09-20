@@ -100,14 +100,22 @@ Cross-platform (Windows, macOS, Linux), local-first, built with Tauri, Rust, Rea
 | **Cursor** | `cursor-agent` | Session resume |
 | **Antigravity** | `agy` | Usage cards |
 | **OpenCode** | `opencode` | Session resume |
+| **Kiro CLI** | `kiro-cli` | |
 | **Mimo** | `mimo` | |
 | **Freebuff** | `freebuff` | |
 | **Shell** | pwsh / bash / zsh | The plain terminal, same pane model |
+| **WSL** | `wsl.exe` | The default distro, as a plain shell (Windows) |
 
 Missing CLIs can be installed, updated, and uninstalled from inside Alethe — it probes the machine
 for Node, npm, WinGet, Scoop, and Chocolatey and offers only the methods that actually work there,
 preferring each vendor's official installer. Already-installed CLIs are discovered across PATH,
 registry, npm/pnpm/Volta/fnm/nvm/Bun/Cargo/Scoop/Chocolatey, and can be pointed at a custom path.
+A plugin can add an agent of its own to this list.
+
+Agents can optionally be routed through [9router](https://github.com/decolua/9router), a local proxy
+that spreads traffic across providers with automatic fallback. Alethe installs and runs a private,
+version-pinned copy without touching your global npm packages. Routing is off by default and applies
+only to terminals opened after it is switched on.
 
 ## What It Does
 
@@ -139,6 +147,20 @@ registry, npm/pnpm/Volta/fnm/nvm/Bun/Cargo/Scoop/Chocolatey, and can be pointed 
   shared skill shows up once.
 - **Graphify**: a code graph of the project, served to the agents as an MCP server.
 
+**Extend it with plugins**
+
+- Features load as **plugins**, not hard-wired code. Official ones — Todo List, Git Control, Theme
+  Pack — ship inside the installer and can be switched off in Preferences ▸ Plugins, with their
+  surfaces appearing and disappearing without a restart.
+- A plugin can contribute a workspace pane, a sidebar tab, a command palette entry, a full theme, or
+  a new agent provider. It declares what it needs in its manifest, and the app refuses anything it
+  did not ask for.
+- **Plugin catalogue**: plugins published by other people are listed inside Alethe with their
+  permissions spelled out, and a listing that ships a package installs — and updates — in one click.
+  The index pins every package to a SHA-256 checksum, so what runs is what the listing was reviewed
+  against. An installed plugin arrives switched off and goes through a trust dialog before it runs.
+- See the [plugin guide](docs/PLUGINS.md) to write one.
+
 **Stay in control**
 
 - RAM readout in the title bar; disable a terminal or suspend a whole group to get memory back.
@@ -150,8 +172,13 @@ registry, npm/pnpm/Volta/fnm/nvm/Bun/Cargo/Scoop/Chocolatey, and can be pointed 
   human action, blocked when the head SHA moved, the PR is a draft, or GitHub reports conflicts. No
   GitHub token is stored; authentication is delegated to `gh`.
 - Content panes beside the terminals: file explorer, Markdown, diffs, images, video, embedded browser.
-- Todos per project, isolated profiles, local backup export/import, 14 UI and terminal themes,
-  EN and pt-BR.
+- Todos per project with a Pomodoro timer, isolated profiles, local backup export/import, UI and
+  terminal themes, EN and pt-BR.
+- **Orchestration board**: a lead agent delegates units of work to Claude and Codex workers that
+  Alethe runs in parallel — each optionally in its own git worktree, each reporting status, cost,
+  tokens and diff on its card, and each able to ask you before it leaves its sandbox. Off by default.
+- **Local voice dictation** with an on-device model, and **cloud sync** of your preferences through
+  a GitHub sign-in — both optional.
 - **Remote Control**: an authenticated LAN web view, paired by QR code, to follow and answer agents
   from your phone. It is off by default and uses unencrypted HTTP/WebSocket transport on the LAN, so
   enable it only on a trusted network. Clean profiles are read-only; answering agents requires a
