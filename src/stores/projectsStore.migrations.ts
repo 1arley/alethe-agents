@@ -1,3 +1,4 @@
+import { normalizeProjectGrids, projectGridContainer } from '../lib/projectGrids'
 import { nanoid } from 'nanoid'
 
 import {
@@ -330,7 +331,7 @@ export function migrateWorkspaceNavigation(base: {
   }
 }
 
-function migrateToV7(parsed: any): ProjectsFile {
+function migrateToV7(parsed: any): any {
   return normalizeStoredAccents({
     ...parsed,
     version: 7,
@@ -355,12 +356,12 @@ function migrateToV7(parsed: any): ProjectsFile {
  * exposed (not explicitly `remoteExcluded: true`) keeps working after the
  * upgrade; only terminals created from here on default to unshared.
  */
-function migrateToV8(parsed: any): ProjectsFile {
+function migrateToV8(parsed: any): any {
   const v7 = migrateToV7(parsed)
   return {
     ...v7,
     version: 8,
-    projects: v7.projects.map((project) => ({
+    projects: v7.projects.map((project: Project) => ({
       ...project,
       terminals: (project.terminals ?? []).map((terminal) => ({
         ...terminal,
@@ -372,6 +373,38 @@ function migrateToV8(parsed: any): ProjectsFile {
 
 /** Migrates older files and normalizes restorable snapshots. */
 export function migrate(parsed: any): ProjectsFile {
+  const base = migrateLegacy(parsed.version === 9 ? { ...parsed, version: 8 } : parsed)
+  const projects = base.projects.map((project: Project) => normalizeProjectGrids(project))
+  const migrateSnapshot = (snapshot: WorkspaceTab['snapshot'], scoped: boolean) =>
+    sanitizeWorkspaceSnapshot({
+      ...snapshot,
+      containers: snapshot.containers.map((container) => {
+        const project = projects.find((item: Project) => item.id === container.projectId)
+        if (!project || project.mode === 'agentSandbox' || !scoped || container.gridId) return container
+        return { ...container, gridId: projectGridContainer(project).gridId }
+      }),
+    }, projects)
+  const activeTab = base.workspace.tabs.find((tab: WorkspaceTab) => tab.id === base.workspace.activeTabId)
+  const scoped = (tab?: WorkspaceTab) => tab?.kind === 'project' || tab?.kind === 'group'
+  return {
+    ...base, version: 9, projects,
+    workspace: {
+      ...base.workspace,
+      containers: migrateSnapshot({ ...captureWorkspaceSnapshot({
+        containers: base.workspace.containers, activeProjectId: base.activeProjectId,
+        activeGroupId: base.workspace.activeGroupId, focusedTerminalId: base.workspace.focusedTerminalId,
+        preferences: base.preferences,
+      }) }, scoped(activeTab)).containers,
+      tabs: base.workspace.tabs.map((tab: WorkspaceTab) => ({ ...tab, snapshot: migrateSnapshot(tab.snapshot, scoped(tab)) })),
+      closedTabs: (base.workspace.closedTabs ?? []).map((tab: WorkspaceTab) => ({ ...tab, snapshot: migrateSnapshot(tab.snapshot, scoped(tab)) })),
+      history: base.workspace.history.map((entry: ProjectsFile['workspace']['history'][number]) => ({
+        ...entry, snapshot: migrateSnapshot(entry.snapshot, scoped(base.workspace.tabs.find((tab: WorkspaceTab) => tab.id === entry.tabId))),
+      })),
+    },
+  }
+}
+
+function migrateLegacy(parsed: any): ProjectsFile {
   if (parsed.version === 8) return migrateToV8(parsed)
   if (parsed.version === 7) return migrateToV8(parsed)
   if (parsed.version === 6) return migrateToV8(parsed)

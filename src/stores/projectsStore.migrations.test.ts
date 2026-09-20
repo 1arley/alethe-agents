@@ -80,7 +80,7 @@ describe('projects file migration', () => {
       preferences: { ...DEFAULT_PREFERENCES, workspaceGridLayoutHistory: undefined },
     })
 
-    expect(migrated.version).toBe(8)
+    expect(migrated.version).toBe(9)
     expect(migrated.projects[0].gridLayoutHistory).toEqual([])
     expect(migrated.groups[0].gridLayoutHistory).toEqual([])
     expect(migrated.preferences.workspaceGridLayoutHistory).toEqual([])
@@ -102,7 +102,7 @@ describe('projects file migration', () => {
       ],
     })
 
-    expect(migrated.version).toBe(8)
+    expect(migrated.version).toBe(9)
     const terminals = migrated.projects[0].terminals
     expect(terminals.find((t) => t.id === 'excluded')?.remoteShared).toBe(false)
     expect(terminals.find((t) => t.id === 'shared')?.remoteShared).toBe(true)
