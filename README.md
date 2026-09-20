@@ -159,7 +159,25 @@ only to terminals opened after it is switched on.
   permissions spelled out, and a listing that ships a package installs — and updates — in one click.
   The index pins every package to a SHA-256 checksum, so what runs is what the listing was reviewed
   against. An installed plugin arrives switched off and goes through a trust dialog before it runs.
-- See the [plugin guide](docs/PLUGINS.md) to write one.
+
+**Publishing a plugin**
+
+A plugin is a folder whose name matches the `id` in its `plugin.json`, next to a `main.js` bundle
+that binds against `window.alethe` (React included — never bundle your own). The manifest declares
+the tabs, commands and capabilities; the code implements them.
+
+1. **Try it locally.** Drop the folder into `<profile>/plugins/<id>/`, or use Preferences ▸ Plugins
+   ▸ *Import plugin*. It arrives switched off — enabling it goes through the trust dialog.
+2. **Ship a zip.** Zip the plugin folder, take its SHA-256, and attach it to a release:
+   `zip -r my-plugin.zip my-plugin && sha256sum my-plugin.zip`.
+3. **Get it listed.** Open a pull request against this repository adding one entry to
+   [`plugins.json`](plugins.json) with `id`, `name`, `downloadUrl` and — to make it installable from
+   inside Alethe — `package.url` and `package.sha256`. Re-hash whenever the zip changes.
+4. Once merged, the listing reaches everyone within six hours, or immediately on *Refresh*.
+
+Listing is a human reading your pull request, not an audit: the plugin still arrives disabled and
+still goes through the trust dialog. `docs/examples/notes-plugin/` is a working plugin in plain
+JavaScript with no build step; the [plugin guide](docs/PLUGINS.md) has the full contract.
 
 **Stay in control**
 
