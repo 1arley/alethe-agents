@@ -22,6 +22,8 @@ import type { UpdateInfo } from '../lib/updater'
 /** Ephemeral UI state. Persisted state belongs in `projectsStore`. */
 
 type ModalKind =
+  | 'resetCredit'
+  | 'projectGrid'
   | 'newProject'
   | 'newGroup'
   | 'editGroup'

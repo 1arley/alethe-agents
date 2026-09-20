@@ -232,6 +232,7 @@ export type BrowserPaneOptions = BrowserPaneConfig & {
 }
 
 export type Terminal = {
+  gridId?: string
   id: string
   name: string
   cwd: string
@@ -306,7 +307,18 @@ export type OrphanWorktree = {
   adminLockReason?: string
 }
 
+export type ProjectGrid = {
+  id: string
+  name: string
+  collapsed: boolean
+  layoutMode: LayoutMode
+  gridLayout?: GridLayout
+  gridLayoutHistory?: GridLayoutHistoryEntry[]
+}
+
 export type Project = {
+  grids?: ProjectGrid[]
+  activeGridId?: string
   id: string
   name: string
   /** Determines which workspace opens when the project is selected. */
@@ -400,6 +412,8 @@ export type Group = {
 }
 
 export type WorkspaceContainer = {
+  /** Present for a project grid; absent for explicitly composed pane selections. */
+  gridId?: string
   projectId: string
 
   paneIds: string[]
@@ -621,7 +635,7 @@ export type ResourcePolicyPreferences = {
 }
 
 export type ProjectsFile = {
-  version: 8
+  version: 9
   groups: Group[]
 
   ungroupedOrder: string[]
@@ -741,7 +755,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
 }
 
 export const EMPTY_PROJECTS_FILE: ProjectsFile = {
-  version: 8,
+  version: 9,
   groups: [],
   ungroupedOrder: [],
   projects: [],
