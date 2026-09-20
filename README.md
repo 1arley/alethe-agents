@@ -97,6 +97,7 @@ Cross-platform (Windows, macOS, Linux), local-first, built with Tauri, Rust, Rea
 | **Claude Code** | `claude` | Session resume, usage cards, local history |
 | **Codex** | `codex` | Session resume, usage cards |
 | **GitHub Copilot CLI** | `copilot` | |
+| **Cursor** | `cursor-agent` | Session resume |
 | **Antigravity** | `agy` | Usage cards |
 | **OpenCode** | `opencode` | Session resume |
 | **Mimo** | `mimo` | |
@@ -121,7 +122,7 @@ registry, npm/pnpm/Volta/fnm/nvm/Bun/Cargo/Scoop/Chocolatey, and can be pointed 
 
 **Keep the context**
 
-- Sessions of Claude Code, Codex, and OpenCode resume after a crash or a restart.
+- Sessions of Claude Code, Codex, Cursor, and OpenCode resume after a crash or a restart.
 - **Recent chats** lists the conversations of a pane's working directory and reopens any of them.
 - A Claude Code conversation can be **handed off to Codex** (and back) through a locally redacted
   context packet — no copy-pasting the thread by hand. Redaction is best effort, so review the packet
@@ -131,9 +132,9 @@ registry, npm/pnpm/Volta/fnm/nvm/Bun/Cargo/Scoop/Chocolatey, and can be pointed 
 **Manage what the agents share**
 
 - **MCP tab**: every MCP server configured on the machine, grouped by server and showing which agents
-  have it — read from Claude Code, Codex, OpenCode, and Antigravity configs. Add, remove, copy a
-  server from one agent to another, search the official registry, and ask each agent to verify it can
-  really reach a server. Every write is backed up, re-parsed, and committed atomically.
+  have it — read from Claude Code, Codex, Cursor, OpenCode, and Antigravity configs. Add, remove,
+  copy a server from one agent to another, search the official registry, and ask each agent to verify
+  it can really reach a server. Every write is backed up, re-parsed, and committed atomically.
 - **Skills tab**: the skills installed for each agent, with links and shared stores resolved so a
   shared skill shows up once.
 - **Graphify**: a code graph of the project, served to the agents as an MCP server.
@@ -143,6 +144,11 @@ registry, npm/pnpm/Volta/fnm/nvm/Bun/Cargo/Scoop/Chocolatey, and can be pointed 
 - RAM readout in the title bar; disable a terminal or suspend a whole group to get memory back.
 - Git panel per project — status, stage, commit, branches, diffs in a pane — plus worktrees for
   parallel tasks.
+- **Pull Request review**: the merge panel finds the open GitHub PR for an agent worktree through the
+  local `gh` CLI, opens its metadata, and can start an AI review inside the same isolated worktree —
+  read-only, with no commits, pushes, merges, or GitHub comments. Squash-merging stays an explicit
+  human action, blocked when the head SHA moved, the PR is a draft, or GitHub reports conflicts. No
+  GitHub token is stored; authentication is delegated to `gh`.
 - Content panes beside the terminals: file explorer, Markdown, diffs, images, video, embedded browser.
 - Todos per project, isolated profiles, local backup export/import, 14 UI and terminal themes,
   EN and pt-BR.
@@ -308,10 +314,13 @@ Thanks to everyone helping shape Alethe.
   <a href="https://github.com/HayatoG"><img src="https://github.com/HayatoG.png?size=100" width="80" height="80" alt="HayatoG" title="HayatoG" /></a>
   <a href="https://github.com/slegarraga"><img src="https://github.com/slegarraga.png?size=100" width="80" height="80" alt="slegarraga" title="slegarraga" /></a>
   <a href="https://github.com/lucapohl-angel"><img src="https://github.com/lucapohl-angel.png?size=100" width="80" height="80" alt="lucapohl-angel" title="lucapohl-angel" /></a>
+  <a href="https://github.com/1arley"><img src="https://github.com/1arley.png?size=100" width="80" height="80" alt="1arley" title="1arley" /></a>
   <a href="https://github.com/potatoiscompiled"><img src="https://github.com/potatoiscompiled.png?size=100" width="80" height="80" alt="potatoiscompiled" title="potatoiscompiled" /></a>
+  <a href="https://github.com/GustavoAlmeidaDoNascimento"><img src="https://github.com/GustavoAlmeidaDoNascimento.png?size=100" width="80" height="80" alt="GustavoAlmeidaDoNascimento" title="GustavoAlmeidaDoNascimento" /></a>
   <a href="https://github.com/Jbnado"><img src="https://github.com/Jbnado.png?size=100" width="80" height="80" alt="Jbnado" title="Jbnado" /></a>
   <a href="https://github.com/chintanparmar011"><img src="https://github.com/chintanparmar011.png?size=100" width="80" height="80" alt="chintanparmar011" title="chintanparmar011" /></a>
   <a href="https://github.com/AshSgDe29071999"><img src="https://github.com/AshSgDe29071999.png?size=100" width="80" height="80" alt="AshSgDe29071999" title="AshSgDe29071999" /></a>
+  <a href="https://github.com/sthevan027"><img src="https://github.com/sthevan027.png?size=100" width="80" height="80" alt="sthevan027" title="sthevan027" /></a>
   <a href="https://github.com/rlevidev"><img src="https://github.com/rlevidev.png?size=100" width="80" height="80" alt="rlevidev" title="rlevidev" /></a>
   <a href="https://github.com/mapsiva"><img src="https://github.com/mapsiva.png?size=100" width="80" height="80" alt="mapsiva" title="mapsiva" /></a>
   <a href="https://github.com/moisesz10"><img src="https://github.com/moisesz10.png?size=100" width="80" height="80" alt="moisesz10" title="moisesz10" /></a>
@@ -326,14 +335,18 @@ Thanks to everyone helping shape Alethe.
   <a href="https://github.com/fernando-c-lima"><img src="https://github.com/fernando-c-lima.png?size=100" width="80" height="80" alt="fernando-c-lima" title="fernando-c-lima" /></a>
   <a href="https://github.com/feejunior"><img src="https://github.com/feejunior.png?size=100" width="80" height="80" alt="feejunior" title="feejunior" /></a>
   <a href="https://github.com/eudehh"><img src="https://github.com/eudehh.png?size=100" width="80" height="80" alt="eudehh" title="eudehh" /></a>
+  <a href="https://github.com/dudukings1"><img src="https://github.com/dudukings1.png?size=100" width="80" height="80" alt="dudukings1" title="dudukings1" /></a>
+  <a href="https://github.com/davidwallaci"><img src="https://github.com/davidwallaci.png?size=100" width="80" height="80" alt="davidwallaci" title="davidwallaci" /></a>
   <a href="https://github.com/tomatotomata"><img src="https://github.com/tomatotomata.png?size=100" width="80" height="80" alt="tomatotomata" title="tomatotomata" /></a>
   <a href="https://github.com/ThiagoSales17"><img src="https://github.com/ThiagoSales17.png?size=100" width="80" height="80" alt="ThiagoSales17" title="ThiagoSales17" /></a>
   <a href="https://github.com/opedrooz"><img src="https://github.com/opedrooz.png?size=100" width="80" height="80" alt="opedrooz" title="opedrooz" /></a>
   <a href="https://github.com/devmatheusmota"><img src="https://github.com/devmatheusmota.png?size=100" width="80" height="80" alt="devmatheusmota" title="devmatheusmota" /></a>
   <a href="https://github.com/JohnPss"><img src="https://github.com/JohnPss.png?size=100" width="80" height="80" alt="JohnPss" title="JohnPss" /></a>
   <a href="https://github.com/GabrielKLopes"><img src="https://github.com/GabrielKLopes.png?size=100" width="80" height="80" alt="GabrielKLopes" title="GabrielKLopes" /></a>
+  <a href="https://github.com/pinhaum"><img src="https://github.com/pinhaum.png?size=100" width="80" height="80" alt="pinhaum" title="pinhaum" /></a>
   <a href="https://github.com/floze-the-genius"><img src="https://github.com/floze-the-genius.png?size=100" width="80" height="80" alt="floze-the-genius" title="floze-the-genius" /></a>
   <a href="https://github.com/aryansk"><img src="https://github.com/aryansk.png?size=100" width="80" height="80" alt="aryansk" title="aryansk" /></a>
+  <a href="https://github.com/sousaakira"><img src="https://github.com/sousaakira.png?size=100" width="80" height="80" alt="sousaakira" title="sousaakira" /></a>
   <!-- contributors:end -->
 </p>
 

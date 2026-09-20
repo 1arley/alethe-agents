@@ -44,6 +44,7 @@ import {
   clearPtyScrollback,
   codexHooksConfigWrite,
   codexMcpConfigWrite,
+  createCursorChat,
   findCliLauncher,
   graphifyCodexConfigWrite,
   graphifyEnsureGraph,
@@ -927,7 +928,7 @@ export function useXtermSession(params: {
       }
     })
 
-    const RESUMABLE_AGENTS = ['claude', 'codex', 'opencode', 'antigravity']
+    const RESUMABLE_AGENTS = ['claude', 'codex', 'cursor', 'opencode', 'antigravity']
 
     async function start() {
       try {
@@ -1060,6 +1061,13 @@ export function useXtermSession(params: {
           } catch {
             /* A failed snapshot must not discard a known conversation. */
           }
+          if (disposed) return
+        }
+
+        // Cursor keeps its chats in an opaque store, so there is nothing to scan for afterwards:
+        // the pane asks the CLI for a chat up front and holds that ID for every later relaunch.
+        if (command === 'cursor' && !resumeId && cwd) {
+          resumeId = (await createCursorChat(cwd).catch(() => undefined)) || undefined
           if (disposed) return
         }
 
@@ -1427,11 +1435,7 @@ export function useXtermSession(params: {
             completionMonitor = null
             return
           }
-          const isAgent =
-            command === 'claude' ||
-            command === 'codex' ||
-            command === 'opencode' ||
-            command === 'antigravity'
+          const isAgent = command ? RESUMABLE_AGENTS.includes(command) : false
           const elapsed = Date.now() - spawnedAtRef.current
 
           if (

@@ -59,7 +59,7 @@ type ModalKind =
 
 export type ActiveView = 'home' | 'workspace' | 'agentCanvas' | 'agentSandbox'
 /** Open on purpose: plugins contribute right-sidebar tabs at runtime. */
-export type RightSidebarMode = 'markdown' | 'gsdSync' | 'mcp' | (string & {})
+export type RightSidebarMode = 'markdown' | 'gsdSync' | 'mcp' | 'prs' | (string & {})
 export type MarkdownSidebarTab = { path: string; title: string }
 
 export type MemorySample = MemoryStats & {
@@ -166,6 +166,7 @@ type UiState = {
   setLeftSidebarTab: (tab: string) => void
   showGsdSyncSidebar: () => void
   showMcpSidebar: () => void
+  showPrsSidebar: () => void
   setAgentCanvasSession: (session: { folder: string; ptyId: string } | null) => void
   setAgentCanvasBudget: (usd: number | null) => void
   pushToast: (toast: {
@@ -310,6 +311,7 @@ export const useUiStore = create<UiState>((set) => ({
   setLeftSidebarTab: (tab) => set({ leftSidebarTab: tab }),
   showGsdSyncSidebar: () => set({ rightSidebarMode: 'gsdSync' }),
   showMcpSidebar: () => set({ rightSidebarMode: 'mcp' }),
+  showPrsSidebar: () => set({ rightSidebarMode: 'prs' }),
   setAgentCanvasSession: (session) => set({ agentCanvasSession: session }),
   setAgentCanvasBudget: (usd) => set({ agentCanvasBudgetUsd: usd }),
   pushToast: ({ title, body, agent, actions, silent }) =>

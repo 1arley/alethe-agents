@@ -40,7 +40,7 @@
           "http:",
           "https:"
         ],
-        "media-src": ["'self'", "asset:", "http://asset.localhost"],
+        "media-src": ["'self'", "asset:", "http://asset.localhost", "mediastream:", "blob:"],
         "font-src": ["'self'", "alethe-plugin:", "http://alethe-plugin.localhost"],
         "connect-src": [
           "'self'",
