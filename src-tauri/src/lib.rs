@@ -51,6 +51,7 @@ mod planning;
 mod planning_gate;
 mod plugin_assets;
 mod plugin_catalog;
+mod plugin_package;
 mod plugins;
 mod process_tree;
 mod profiles;
@@ -417,6 +418,7 @@ pub fn run() {
             antigravity_sessions::snapshot_antigravity_sessions,
             claude_usage::get_claude_usage,
             codex_usage::get_codex_usage,
+            codex_usage::consume_codex_reset_credit,
             antigravity_usage::get_antigravity_usage,
             agent_cost::get_session_cost,
             agent_cost::get_transcript_cost,
@@ -497,6 +499,7 @@ pub fn run() {
             plugins::plugin_set_enabled,
             plugin_catalog::plugin_catalog,
             plugin_catalog::plugin_catalog_open,
+            plugin_catalog::plugin_install_from_catalog,
             plugins::plugin_storage_read,
             plugins::plugin_storage_write,
             mcp_store::mcp_scan,
