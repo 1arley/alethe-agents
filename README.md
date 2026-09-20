@@ -339,10 +339,15 @@ Thanks to everyone helping shape Alethe.
 
 ## License
 
-The source code is distributed under **AGPL-3.0-or-later**. See [`LICENSE`](LICENSE) for details.
+The source code is distributed under **AGPL-3.0-or-later**. Modifications and covered derivative
+works that are distributed, or made available to users over a network, must provide their
+corresponding source under the same license. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+
 Official hosted services, such as sync, backup, billing, or cloud features, may be proprietary and
-offered separately. The **Alethe** name, logo, and official branding are reserved for official builds
-— see [`TRADEMARK.md`](TRADEMARK.md).
+offered separately. The code license does not grant rights to the **Alethe** name, logo, application
+icon, or official branding. Modified builds must be independently branded, and commercial use of
+the Alethe brand requires prior written permission from Kauã Miguel. See
+[`TRADEMARK.md`](TRADEMARK.md).
 
 ## Community
 

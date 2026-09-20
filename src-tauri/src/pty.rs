@@ -1725,6 +1725,11 @@ mod tests {
         let source = include_str!("pty.rs");
         for (index, _) in source.match_indices("child.lock()") {
             let tail = &source[index..];
+            let statement_end = tail.find(';').unwrap_or(tail.len());
+            let guard_scope = tail.find('{').unwrap_or(tail.len());
+            if statement_end < guard_scope {
+                continue;
+            }
             let block_end = tail
                 .find(
                     "

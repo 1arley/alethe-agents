@@ -45,6 +45,9 @@ Roughly ordered from "you can do this today" to "talk to us first":
    Bigger, less hand-held, still well-defined.
 6. **Propose a feature.** Open an issue describing the *workflow* it would improve before writing
    code — it's the cheapest way to avoid building something that won't be merged.
+7. **Write a plugin.** Features can live outside the core. The [plugin guide](docs/PLUGINS.md)
+   covers the manifest, capabilities and contribution points, and how to get a plugin listed in
+   the in-app catalogue.
 
 > For anything larger than a bug fix, open an issue first so the direction can be agreed on
 > before you spend your evening on it.
@@ -283,5 +286,8 @@ The Rust backend compiles from scratch the first time. Grab a coffee; it's cache
 ## License
 
 Alethe is licensed under **AGPL-3.0-or-later**. By contributing, you agree that your contribution
-is licensed under the same terms. The **Alethe** name, logo, and branding are reserved for
-official builds — see [`TRADEMARK.md`](TRADEMARK.md).
+is licensed under the same terms. Preserve the project's copyright, license, attribution, and
+warranty notices when redistributing the code. The **Alethe** name, logo, application icon, and
+branding are reserved for official builds and are not licensed under the AGPL. Modified builds
+must be independently branded unless Kauã Miguel grants prior written permission — see
+[`NOTICE`](NOTICE) and [`TRADEMARK.md`](TRADEMARK.md).
