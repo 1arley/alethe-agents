@@ -93,9 +93,9 @@ jobs:
         working-directory: src-tauri
         run: cargo check
 
-      # Não-bloqueante por enquanto: já há ~37 warnings pré-existentes no
-      # código atual (nenhum deles deste PR). Endurecer pra `-D warnings`
-      # depois de uma limpeza dedicada, não junto de outra tarefa.
+      # Non-blocking for now: the current code already carries ~37 pre-existing
+      # warnings (none from this change). Tighten it to `-D warnings` in a
+      # dedicated cleanup, not alongside another task.
       - name: cargo clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets
