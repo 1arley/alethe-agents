@@ -16,6 +16,8 @@ Notable user-facing changes to **Alethe** are documented here. The format is bas
   embeds `@xterm/xterm` through `include_str!`, which needs `node_modules` on disk — the CI now
   installs the JS dependencies in the Rust job too. Lint errors in example plugins and a few
   `prefer-const`/empty-`catch` cases in components are fixed as well.
+- Terminal paste now uses the native clipboard fallback when browser clipboard access is unavailable,
+  Ctrl+Shift+C copies selected text, and Ctrl+C reaches the running process.
 
 ## [1.7.0] — 2026-09-20
 
