@@ -10,6 +10,13 @@ Notable user-facing changes to **Alethe** are documented here. The format is bas
 
 ## [Unreleased]
 
+### Fixed
+
+- Build: the Rust check no longer fails on Linux, macOS and Windows because the remote surface
+  embeds `@xterm/xterm` through `include_str!`, which needs `node_modules` on disk — the CI now
+  installs the JS dependencies in the Rust job too. Lint errors in example plugins and a few
+  `prefer-const`/empty-`catch` cases in components are fixed as well.
+
 ## [1.7.0] — 2026-09-20
 
 The release where Alethe stops being one fixed app and becomes a platform. Features now load as

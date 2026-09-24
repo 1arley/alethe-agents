@@ -245,7 +245,7 @@ export async function resetLastSession(): Promise<ResetLastSessionResult> {
 
       resumed++
     } catch {
-                                                 
+    /* ok */
     } finally {
       releaseSpawnSlot()
     }
