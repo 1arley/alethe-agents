@@ -3,13 +3,14 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 use std::time::SystemTime;
 
 #[cfg(windows)]
 use winreg::{enums::*, RegKey};
 
-static REBUILT_PATH: OnceLock<String> = OnceLock::new();
+/// `None` until the first lookup, and reset to it by `invalidate_rebuilt_path` after an install.
+static REBUILT_PATH: RwLock<Option<String>> = RwLock::new(None);
 
 pub fn default_shell() -> String {
     #[cfg(windows)]
@@ -168,7 +169,20 @@ pub fn find_windows_cli_launcher(command: &str) -> Option<PathBuf> {
     Some(resolved)
 }
 
+/// Binary name for an agent whose CLI is not called after the vendor: Antigravity ships `agy`, and
+/// Cursor ships `cursor-agent` (its bare `agent` alias collides with other vendors' CLIs). Callers
+/// normally pass the binary name already, so this only has to catch the ones that pass an agent id.
+fn canonical_cli_name(command: &str) -> &str {
+    match command {
+        "antigravity" => "agy",
+        "cursor" => "cursor-agent",
+        other => other,
+    }
+}
+
 fn resolve_cli_launcher(command: &str) -> Option<PathBuf> {
+    let command = canonical_cli_name(command);
+
     #[cfg(not(windows))]
     {
         if let Ok(path) = which::which(command) {
@@ -179,12 +193,15 @@ fn resolve_cli_launcher(command: &str) -> Option<PathBuf> {
             dirs.push(home.join(".local").join("bin"));
             dirs.push(home.join(".cargo").join("bin"));
         }
-        // App .app lançado via Finder/DMG não roda como login shell: herda o
-        // PATH mínimo do Launch Services (sem .zshrc/.zprofile), então CLIs
-        // instaladas via `brew install` ficam invisíveis pro `which` acima
-        // mesmo estando no disco. Cobrir os prefixos padrão do Homebrew
-        // (Apple Silicon e Intel) como fallback fixo.
+        // An .app launched from Finder/DMG does not run as a login shell: it inherits the
+        // minimal Launch Services PATH (no .zshrc/.zprofile), so CLIs installed via
+        // `brew install` stay invisible to `which` above even when they exist on disk.
+        // Cover the default Homebrew prefixes (Apple Silicon and Intel) as a fixed fallback.
         dirs.extend(homebrew_dirs());
+        // Linux user-scoped installers (nvm, bun, npm --prefix, pnpm, volta) —
+        // invisible under the minimal PATH a desktop menu inherits.
+        #[cfg(target_os = "linux")]
+        dirs.extend(linux_user_dirs());
         for dir in dirs {
             let candidate = dir.join(command);
             if candidate.is_file() {
@@ -200,19 +217,11 @@ fn resolve_cli_launcher(command: &str) -> Option<PathBuf> {
         dirs.extend(split_windows_path_expanded(&rebuilt_path()));
         dirs.extend(agent_search_dirs());
 
-        // exclusivamente `agy`. Nunca use o desktop como fallback para o CLI.
-        let candidates_to_try = match command {
-            "antigravity" | "agy" => vec!["agy"],
-            other => vec![other],
-        };
-
-        for cmd_name in candidates_to_try {
-            for dir in &dirs {
-                for extension in ["cmd", "exe", "bat", "ps1"] {
-                    let candidate = dir.join(format!("{cmd_name}.{extension}"));
-                    if candidate.is_file() {
-                        return Some(candidate);
-                    }
+        for dir in &dirs {
+            for extension in ["cmd", "exe", "bat", "ps1"] {
+                let candidate = dir.join(format!("{command}.{extension}"));
+                if candidate.is_file() {
+                    return Some(candidate);
                 }
             }
         }
@@ -257,36 +266,38 @@ fn parse_version(raw: &str) -> Option<String> {
 /// asks rather than assumes. Output is read from stdout and stderr because some print to stderr.
 const VERSION_FLAGS: [&str; 3] = ["--version", "-v", "version"];
 
+/// Version a CLI at a known path reports, or `None` when it answers nothing usable.
+pub(crate) fn cli_version_at(bin: &std::path::Path) -> Option<String> {
+    for flag in VERSION_FLAGS {
+        let mut command = std::process::Command::new(bin);
+        command.arg(flag);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+        let Ok(output) = command.output() else {
+            continue;
+        };
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if let Some(version) = parse_version(&stdout) {
+            return Some(version);
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if let Some(version) = parse_version(&stderr) {
+            return Some(version);
+        }
+    }
+    None
+}
+
 /// Version the agent's CLI reports, or `None` when it is missing or answers nothing usable.
 #[tauri::command]
 pub async fn agent_cli_version(agent: String) -> Option<String> {
-    tokio::task::spawn_blocking(move || {
-        let bin = find_windows_cli_launcher(&agent)?;
-        for flag in VERSION_FLAGS {
-            let mut command = std::process::Command::new(&bin);
-            command.arg(flag);
-            #[cfg(windows)]
-            {
-                use std::os::windows::process::CommandExt;
-                const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-                command.creation_flags(CREATE_NO_WINDOW);
-            }
-            let Ok(output) = command.output() else {
-                continue;
-            };
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            if let Some(version) = parse_version(&stdout) {
-                return Some(version);
-            }
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            if let Some(version) = parse_version(&stderr) {
-                return Some(version);
-            }
-        }
-        None
-    })
-    .await
-    .unwrap_or(None)
+    tokio::task::spawn_blocking(move || cli_version_at(&find_windows_cli_launcher(&agent)?))
+        .await
+        .unwrap_or(None)
 }
 
 /// Reports which installers are usable on this machine so the UI can offer the
@@ -336,6 +347,7 @@ fn linux_user_dirs() -> Vec<PathBuf> {
         dirs.push(home.join(".cargo").join("bin"));
         dirs.push(home.join(".bun").join("bin"));
         dirs.push(home.join(".npm-global").join("bin"));
+        dirs.push(home.join(".local").join("share").join("pnpm"));
     }
 
     // Volta: `$VOLTA_HOME/bin` when set, otherwise `~/.volta/bin`.
@@ -491,6 +503,9 @@ pub fn agent_search_dirs() -> Vec<PathBuf> {
                     .join("antigravity")
                     .join("bin"),
             );
+            // Cursor's installer drops its shims at the root of this folder, not in a `bin` subdir,
+            // and only puts it on PATH for shells started afterwards.
+            dirs.push(profile.join("AppData").join("Local").join("cursor-agent"));
         }
         if let Some(app_data) = env::var_os("APPDATA").map(PathBuf::from) {
             dirs.push(app_data.join("npm"));
@@ -618,7 +633,37 @@ fn scrub_editor_environment(builder: &mut CommandBuilder) {
 }
 
 pub fn rebuilt_path() -> String {
-    REBUILT_PATH.get_or_init(build_rebuilt_path).clone()
+    if let Ok(cached) = REBUILT_PATH.read() {
+        if let Some(value) = cached.as_ref() {
+            return value.clone();
+        }
+    }
+    let built = build_rebuilt_path();
+    if let Ok(mut cached) = REBUILT_PATH.write() {
+        *cached = Some(built.clone());
+    }
+    built
+}
+
+/// Drops the cached PATH so the next lookup reads what an installer just wrote to the registry.
+/// Windows only hands a new environment to processes started after the change, and this one is
+/// long-lived: without this, a CLI installed from inside Alethe stays invisible until a restart.
+pub fn invalidate_rebuilt_path() {
+    if let Ok(mut cached) = REBUILT_PATH.write() {
+        *cached = None;
+    }
+}
+
+/// Re-reads the machine's environment, then reports the launcher for `command` — what an install
+/// screen calls to find out whether the CLI it was installing has actually landed.
+#[tauri::command]
+pub async fn refresh_cli_launcher(command: String) -> Option<String> {
+    tokio::task::spawn_blocking(move || {
+        invalidate_rebuilt_path();
+        find_windows_cli_launcher(&command).map(|path| path.to_string_lossy().to_string())
+    })
+    .await
+    .unwrap_or(None)
 }
 
 pub(crate) fn build_rebuilt_path() -> String {
@@ -762,6 +807,8 @@ fn discover_provider_models_inner(provider: String) -> Result<Vec<ModelOption>, 
 
     let cmd_name = match provider_lower.as_str() {
         "antigravity" | "agy" => "agy",
+        "kiro" => "kiro-cli",
+        "cursor" | "cursor-agent" => "cursor-agent",
         other => other,
     };
 
@@ -805,6 +852,27 @@ fn discover_provider_models_inner(provider: String) -> Result<Vec<ModelOption>, 
                     id: "deepseek-r1".into(),
                     label: "DeepSeek R1 (Reasoning)".into(),
                 });
+            }
+        }
+        // `cursor-agent models` lists what the signed-in account can actually reach, which is the
+        // only reliable source: Cursor's line-up changes per plan and over time.
+        "cursor" | "cursor-agent" => {
+            if let Ok(output) = std::process::Command::new(&bin_path).arg("models").output() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    let trimmed = line.trim();
+                    let id = trimmed
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or(trimmed)
+                        .to_string();
+                    if is_valid_model_id(&id) {
+                        models.push(ModelOption {
+                            label: format!("{id} (Cursor)"),
+                            id,
+                        });
+                    }
+                }
             }
         }
         "opencode" => {
@@ -958,6 +1026,35 @@ fn discover_provider_models_inner(provider: String) -> Result<Vec<ModelOption>, 
                 });
             }
         }
+        "kiro" => {
+            if let Ok(output) = std::process::Command::new(&bin_path).arg("models").output() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    let trimmed = line.trim();
+                    let id = trimmed
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or(trimmed)
+                        .to_string();
+                    if is_valid_model_id(&id) {
+                        models.push(ModelOption {
+                            label: format!("{id} (Kiro CLI)"),
+                            id,
+                        });
+                    }
+                }
+            }
+            if models.is_empty() {
+                models.push(ModelOption {
+                    id: "claude-sonnet-4.5".into(),
+                    label: "Claude Sonnet 4.5 (Anthropic via Kiro)".into(),
+                });
+                models.push(ModelOption {
+                    id: "claude-haiku-4.5".into(),
+                    label: "Claude Haiku 4.5 (Anthropic via Kiro)".into(),
+                });
+            }
+        }
         _ => {}
     }
 
@@ -1048,5 +1145,41 @@ mod tests {
     fn resolves_cli_launcher_on_unix() {
         assert!(find_windows_cli_launcher("sh").is_some());
         assert!(find_windows_cli_launcher("non_existent_binary_xyz_123").is_none());
+    }
+
+    /// With the Linux user-bin-dirs fallback, an agent installed via
+    /// `npm --prefix ~/.npm-global` is found even under a minimal desktop-menu
+    /// PATH.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_user_dirs_finds_npm_global_agents() {
+        let home = std::env::temp_dir().join("alethe-audit-home");
+        let npm_global = home.join(".npm-global").join("bin");
+        std::fs::create_dir_all(&npm_global).expect("create npm-global dir");
+        std::fs::write(npm_global.join("fake-agent-audit"), "#!/bin/sh\necho hi\n")
+            .expect("write fake agent");
+        let original_home = std::env::var_os("HOME");
+        let original_path = std::env::var_os("PATH");
+        std::env::set_var("HOME", &home);
+        std::env::set_var(
+            "PATH",
+            "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        );
+        let found = find_windows_cli_launcher("fake-agent-audit");
+        assert!(
+            found.is_some(),
+            "linux_user_dirs should find npm-global installs: {found:?}"
+        );
+        if let Some(h) = original_home {
+            std::env::set_var("HOME", h);
+        } else {
+            std::env::remove_var("HOME");
+        }
+        if let Some(p) = original_path {
+            std::env::set_var("PATH", p);
+        } else {
+            std::env::remove_var("PATH");
+        }
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

@@ -1,4 +1,4 @@
-import type { AgentType } from './types'
+import { isShellAgentType, type AgentType } from './types'
 
 export type AgentLaunch = {
   args: string[]
@@ -43,6 +43,12 @@ function stripAntigravitySessionArgs(args: string[]): string[] {
   )
 }
 
+function stripCursorSessionArgs(args: string[]): string[] {
+  return stripFlagWithValue(args, new Set(['--resume'])).filter(
+    (arg) => arg !== '--continue' && !arg.startsWith('--resume='),
+  )
+}
+
    
                                                                             
                                                                              
@@ -61,24 +67,26 @@ export function buildAgentLaunch(
                                                                                   
                                                                                    
   mcpConfigPaths?: readonly string[],
+  hooksSettingsPath?: string,
 ): AgentLaunch {
-  if (agent === 'shell') {
+  if (isShellAgentType(agent)) {
     return { args: [...baseArgs], sessionId: undefined, createdSession: false }
   }
 
   if (agent === 'claude') {
     const clean = stripClaudeSessionArgs([...baseArgs])
     const mcp = (mcpConfigPaths ?? []).flatMap((path) => ['--mcp-config', path])
+    const settings = hooksSettingsPath ? ['--settings', hooksSettingsPath] : []
     if (sessionId) {
       return {
-        args: ['--resume', sessionId, ...mcp, ...clean],
+        args: ['--resume', sessionId, ...mcp, ...settings, ...clean],
         sessionId,
         createdSession: false,
       }
     }
     const createdId = createUuid()
     return {
-      args: ['--session-id', createdId, ...mcp, ...clean],
+      args: ['--session-id', createdId, ...mcp, ...settings, ...clean],
       sessionId: createdId,
       createdSession: true,
     }
@@ -110,6 +118,23 @@ export function buildAgentLaunch(
     const clean = stripAntigravitySessionArgs([...baseArgs])
     return {
       args: sessionId ? ['--conversation', sessionId, ...clean] : clean,
+      sessionId,
+      createdSession: false,
+    }
+  }
+
+  if (agent === 'kiro') {
+    // kiro-cli only accepts flags like --trust-all-tools under the `chat`
+    // subcommand — passed bare, it rejects them before falling back to it.
+    return { args: ['chat', ...baseArgs], sessionId: undefined, createdSession: false }
+  }
+
+  // Cursor mints its own chat IDs (`cursor-agent create-chat`), so the pane arrives here already
+  // holding one: there is nothing to generate, only a `--resume` to attach.
+  if (agent === 'cursor') {
+    const clean = stripCursorSessionArgs([...baseArgs])
+    return {
+      args: sessionId ? ['--resume', sessionId, ...clean] : clean,
       sessionId,
       createdSession: false,
     }

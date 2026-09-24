@@ -1,3 +1,4 @@
+import { normalizeProjectGrids } from '../lib/projectGrids'
 /** Group and project actions extracted from the main store. */
 
 import { nanoid } from 'nanoid'
@@ -12,7 +13,8 @@ import {
 } from '../lib/terminalFactory'
 import { cleanupPtys } from '../lib/terminalLifecycle'
 import type { Group, Project } from '../lib/types'
-import { agentCliCommand, GROUP_COLORS } from '../lib/types'
+import { resolveAgentCliCommand } from '../lib/agentProviders'
+import { GROUP_COLORS } from '../lib/types'
 import { sanitizeWorkspaceSnapshot } from '../lib/workspaceNavigation'
 import type { ProjectsState } from './projectsStore'
 import { collectGroupProjectIds } from './projectsStore.migrations'
@@ -360,6 +362,7 @@ export function createGroupsSlice({ update }: SliceCtx): GroupsSlice {
 type ProjectsSlice = Pick<
   ProjectsState,
   | 'createProject'
+  | 'importProjectFromFile'
   | 'renameProject'
   | 'archiveProject'
   | 'unarchiveProject'
@@ -400,7 +403,7 @@ export function createProjectsSlice({ set, get, update, updateProject }: SliceCt
       githubUrl,
       firstBootPending,
     }) => {
-      const project: Project = {
+      const project: Project = normalizeProjectGrids({
         id: nanoid(),
         name,
         mode,
@@ -414,7 +417,7 @@ export function createProjectsSlice({ set, get, update, updateProject }: SliceCt
         layoutMode: 'auto',
         collapsed: false,
         createdAt: Date.now(),
-      }
+      })
       update((state) => {
         const groups =
           groupId === null
@@ -430,6 +433,36 @@ export function createProjectsSlice({ set, get, update, updateProject }: SliceCt
           ungroupedOrder,
           activeProjectId: state.activeProjectId ?? project.id,
         }
+      })
+      return project
+    },
+
+    importProjectFromFile: (data, groupId = null) => {
+      const project: Project = normalizeProjectGrids({
+        ...data,
+        id: nanoid(),
+        groupId,
+        archived: false,
+        createdAt: Date.now(),
+        // No live process ever exists to reuse for a freshly imported
+        // project — zeroes every tab's ptyId, but keeps sessionId (tries to
+        // resume on purpose on the next spawn, same logic as the worktree
+        // migration item).
+        terminals: (data.terminals ?? []).map((terminal) => ({
+          ...terminal,
+          tabs: terminal.tabs.map((tab) => ({ ...tab, ptyId: null })),
+        })),
+      })
+      update((state) => {
+        const groups =
+          groupId === null
+            ? state.groups
+            : state.groups.map((g) =>
+                g.id === groupId ? { ...g, projectIds: [...g.projectIds, project.id] } : g,
+              )
+        const ungroupedOrder =
+          groupId === null ? [...state.ungroupedOrder, project.id] : state.ungroupedOrder
+        return { projects: [...state.projects, project], groups, ungroupedOrder }
       })
       return project
     },
@@ -526,7 +559,7 @@ export function createProjectsSlice({ set, get, update, updateProject }: SliceCt
               id: tab.ptyId,
               cols: 80,
               rows: 24,
-              command: agentCliCommand(tab.type),
+              command: resolveAgentCliCommand(tab.type),
               cwd: info.path,
               extraArgs: launch.args,
               env: runtime.env,
@@ -632,7 +665,11 @@ export function createProjectsSlice({ set, get, update, updateProject }: SliceCt
                                                                                 
                                                            
             const gsdWatcherEnabled = gsdWatcherEnabledOverride ?? project.gsdWatcherEnabled
-            if (gsdWatcherEnabled && terminal.tabs.some((tab) => tab.type === 'opencode')) {
+            if (
+              gsdWatcherEnabled &&
+              get().preferences.enabledFeatures.gsdSync &&
+              terminal.tabs.some((tab) => tab.type === 'opencode')
+            ) {
               const modelChain = get().preferences.gsdSyncModelChain ?? []
               await gsdOpenCodePluginWrite(info.path, modelChain).catch((error) => {
                 console.error(
@@ -667,7 +704,7 @@ export function createProjectsSlice({ set, get, update, updateProject }: SliceCt
                   id: tab.ptyId,
                   cols: 80,
                   rows: 24,
-                  command: agentCliCommand(tab.type),
+                  command: resolveAgentCliCommand(tab.type),
                   cwd: info.path,
                   extraArgs: launch.args,
                   env: runtime.env,
@@ -840,12 +877,6 @@ export function createProjectsSlice({ set, get, update, updateProject }: SliceCt
         if (!project) return
         cleanupPtys(collectTerminalPtyIds(project.terminals))
         const projects = state.projects.filter((p) => p.id !== id)
-        const todos = state.todos.map((item) => {
-          if (item.projectId !== id) return item
-          const next = { ...item }
-          delete next.projectId
-          return next
-        })
         const groups = state.groups.map((g) =>
           g.id === project.groupId
             ? { ...g, projectIds: g.projectIds.filter((pid) => pid !== id) }
@@ -883,7 +914,6 @@ export function createProjectsSlice({ set, get, update, updateProject }: SliceCt
           }))
         return {
           projects,
-          todos,
           groups,
           ungroupedOrder,
           workspace: {
